@@ -592,16 +592,16 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             {
                 dbConnection.Open();
                 // Check if the record exists by selecting only required columns
-                var record = dbConnection.QueryFirstOrDefault<premium_validation>(
-                    "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
-                    new { CertificateNo = policyNo.ToString() });
+                    var record = dbConnection.QueryFirstOrDefault<premium_validation>(
+                        "SELECT certificate_no,verified_prem,verified_gst,verified_total_prem FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
+                        new { CertificateNo = policyNo.ToString() });
 
                 if (record != null && record.rn_generation_status == null)
                 {
-                    decimal? crosscheck1 = (orRNEData.FirstOrDefault().num_tot_premium - record.verified_total_prem);
+                    decimal? crosscheck1 = (orRNEData.FirstOrDefault()?.num_tot_premium ?? 0) - (record.verified_total_prem ?? 0);
                     return new verifiedpremiumvalues
                     {
-                        verified_gst = record.verified_gst ?? 0,  // Handle possible nulls
+                        verified_gst = record.verified_gst ?? 0, 
                         verified_total_premium = record.verified_total_prem ?? 0,
                         verified_net_premium = record.verified_prem ?? 0,
                         crosscheck = crosscheck1
@@ -627,8 +627,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             List <OptimaSecureRNE> osRNEData;         
             IEnumerable<OptimaSecureRNE> osRNEDataUpSell = Enumerable.Empty<OptimaSecureRNE>();
             osRNEData = await GetGCDataAsync(policyNo);
-           
-            var premiumvalues = await GetCrosscheckValue(policyNo, osRNEData);
             if (osRNEData != null && osRNEData.Any())
             {
                 foreach (var row in osRNEData)
@@ -641,6 +639,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     }
                 }
             }
+            var premiumvalues = await GetCrosscheckValue(policyNo, osRNEData);
 
             //Combine the result sets and send it in the response.
             //Note: To compute with base SI Premiums for Insureds.
@@ -1142,13 +1141,13 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                 final_Premium_upsell = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell
             };
-            decimal? crosscheck1 = objOptimaSecurePremiumValidationUpSell.cross_Check1;
+            decimal? crosscheck1 = premiumvalues.crosscheck;
             decimal? crosscheck2 = objOptimaSecurePremiumValidationUpSell.cross_Check2;
-            decimal? netPremium = objOptimaSecurePremiumValidationUpSell.net_premium;
+            decimal? netPremium = premiumvalues.verified_net_premium;
 
-            decimal? finalPremium = objOptimaSecurePremiumValidationUpSell.finalPremium;
+            decimal? finalPremium = premiumvalues.verified_total_premium;
 
-            decimal? gst = objOptimaSecurePremiumValidationUpSell.GST;
+            decimal? gst = premiumvalues.verified_gst;
 
             if (objOptimaSecurePremiumValidationUpSell?.policy_number == null)
             {
@@ -1189,9 +1188,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 }
 
                 // Check if the record exists by selecting only required columns
-                var record = dbConnection.QueryFirstOrDefault<rne_calculated_cover_rg>(
-                    "SELECT certificate_no FROM ins.rne_calculated_cover_rg WHERE policy_number = @CertificateNo",
-                    new { CertificateNo = policyNo });                
+                //var record = dbConnection.QueryFirstOrDefault<rne_calculated_cover_rg>(
+                //    "SELECT certificate_no FROM ins.rne_calculated_cover_rg WHERE policy_number = @CertificateNo",
+                //    new { CertificateNo = policyNo });                
                 if (objOptimaSecurePremiumValidationUpSell != null)
                 {
                     var no_of_members = objOptimaSecurePremiumValidationUpSell.no_of_members;
@@ -1303,6 +1302,42 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 return objOptimaSecurePremiumValidationUpSell;
             }
         }
+        async Task<verifiedpremiumvalues> GetCrosscheckValue(string policyNo, List<OptimaRestoreRNE> orRNEData)
+        {
+            string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
+            using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
+            {
+                dbConnection.Open();
+                // Check if the record exists by selecting only required columns
+                var record = dbConnection.QueryFirstOrDefault<premium_validation>(
+                    "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
+                    new { CertificateNo = policyNo.ToString() });
+
+                if (record != null && record.rn_generation_status == null)
+                {
+                    decimal? crosscheck1 = (orRNEData.FirstOrDefault().num_tot_premium - record.verified_total_prem);
+                    return new verifiedpremiumvalues
+                    {
+                        verified_gst = record.verified_gst ?? 0,  // Handle possible nulls
+                        verified_total_premium = record.verified_total_prem ?? 0,
+                        verified_net_premium = record.verified_prem ?? 0,
+                        crosscheck = crosscheck1
+                    };
+
+                }
+                else
+                {
+                    return new verifiedpremiumvalues
+                    {
+                        verified_gst = 0,  // Default values
+                        verified_total_premium = 0,
+                        verified_net_premium = 0,
+                        crosscheck = null
+                    };
+                }
+
+            }
+        }
         async Task HandleCrosschecksAndUpdateStatus(string policyNo,OptimaSecureRNE osRNEData, decimal? crosscheck1, decimal? crosscheck2, decimal? netPremium, decimal? finalPremium, decimal? gst)
         {
             string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
@@ -1348,7 +1383,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 SET verified_prem = @VerifiedPrem,
                     verified_gst = @VerifiedGst,
                     verified_total_prem = @VerifiedTotalPrem,
-                    rn_generation_status=@rn_generation_status=@RNGenerationStatus,
+                    rn_generation_status=@RNGenerationStatus,
                     final_remarks=@FinalRemarks,
                     dispatch_status=@DispatchStatus
                 WHERE certificate_no = @CertificateNo"
@@ -2390,8 +2425,8 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 var deductibleDiscountVal = deductableDiscount
                          .Where(roww =>
                              roww.Value is Hashtable rateDetails &&
-                             rateDetails["si"] != null && (decimal)rateDetails["si"] == sumInsuredList[0] &&
-                             rateDetails["deductible"] != null && (decimal)rateDetails["deductible"] == deductablesInsured1
+                             rateDetails["si"] != null && Convert.ToDecimal(rateDetails["si"]) == sumInsuredList[0] &&
+                             rateDetails["deductible"] != null && Convert.ToDecimal(rateDetails["deductible"]) == deductablesInsured1
                          )
                          .Select(roww =>
                              roww.Value is Hashtable details && details["discount"] != null
@@ -2665,8 +2700,8 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 var cashBenefitPremiumValue = hdcrates
                    .Where(roww =>
                        roww.Value is Hashtable rateDetails &&
-                       (int)rateDetails["si"] != null && (int)rateDetails["si"] == hdcsi &&
-                       (int)rateDetails["age"] != null && (int)rateDetails["age"] == eldestMember &&
+                       rateDetails["si"] != null && (rateDetails["si"] as int? ?? 0) == hdcsi &&
+                       rateDetails["age"] != null && (rateDetails["age"] as int? ?? 0) == eldestMember &&
                        rateDetails["age_band"] != null && rateDetails["age_band"].ToString() == hdcAgeBand &&
                        rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == familyDefn
                    )
