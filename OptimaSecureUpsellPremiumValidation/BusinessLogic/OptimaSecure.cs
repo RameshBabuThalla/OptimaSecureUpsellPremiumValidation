@@ -639,7 +639,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     }
                 }
             }
-            var premiumvalues = await GetCrosscheckValue(policyNo, osRNEData);
+            //var premiumvalues = await GetCrosscheckValue(policyNo, osRNEData);
 
             //Combine the result sets and send it in the response.
             //Note: To compute with base SI Premiums for Insureds.
@@ -1119,10 +1119,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 GST = osRNEData.FirstOrDefault()?.GST.HasValue == true ?
                                   (decimal?)Math.Round(osRNEData.FirstOrDefault().GST.Value, 2)
                                   : (decimal?)null,                
-                cross_Check1 = premiumvalues.crosscheck ?? 0,
-                cross_Check2 = osRNEDataUpSell.FirstOrDefault()?.crossCheck.HasValue == true
-                              ? (decimal?)Math.Round(osRNEDataUpSell.FirstOrDefault().crossCheck.Value, 2)
-                              : (decimal?)null,
+                //cross_Check1 = osRNEDataUpSell.FirstOrDefault()?.baseprem_cross_Check ?? 0,
+                //cross_Check2 = osRNEDataUpSell.FirstOrDefault()?.upsellbaseprem_cross_Check.HasValue == true
+                //              ? (decimal?)Math.Round(osRNEDataUpSell.FirstOrDefault().crossCheck.Value, 2)
+                //              : (decimal?)null,
 
                 //upsell premiums and sum insureds
                 upsell_sum_insured1 = osRNEDataUpSell.FirstOrDefault()?.sum_insured1,
@@ -1141,13 +1141,13 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                 final_Premium_upsell = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell
             };
-            decimal? crosscheck1 = premiumvalues.crosscheck;
-            decimal? crosscheck2 = objOptimaSecurePremiumValidationUpSell.cross_Check2;
-            decimal? netPremium = premiumvalues.verified_net_premium;
+            decimal? crosscheck1 = osRNEDataUpSell.FirstOrDefault()?.baseprem_cross_Check;
+            decimal? crosscheck2 = osRNEDataUpSell.FirstOrDefault()?.upsellbaseprem_cross_Check;
+            decimal? netPremium = osRNEDataUpSell.FirstOrDefault()?.netPremium;
 
-            decimal? finalPremium = premiumvalues.verified_total_premium;
+            decimal? finalPremium = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell;
 
-            decimal? gst = premiumvalues.verified_gst;
+            decimal? gst = osRNEDataUpSell.FirstOrDefault()?.GST;
 
             if (objOptimaSecurePremiumValidationUpSell?.policy_number == null)
             {
@@ -1162,24 +1162,35 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
                     new { CertificateNo = policyNo });
 
-                if (record_idst != null)
+                if (record_idst == null)
                 {
                     if (objOptimaSecurePremiumValidationUpSell.insured_cb1 == string.Empty && objOptimaSecurePremiumValidationUpSell.insured_cb1 == null)
                     {
-                        record_idst.rn_generation_status = "IT Issue - No CB";
-                        record_idst.error_description = "CB SI cannot be zero";
-                        // Update the existing record
-                        var updateQuery = @"
-                            UPDATE ins.premium_validation
-                            SET rn_generation_status=@RNGenerationStatus
-                                error_description = @ErrorDescription
-                            WHERE certificate_no = @CertificateNo";
+                        var insertQuery = @"
+                    INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status)
+                    VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - No CB', 'CB SI cannot be zero')";
 
-                        dbConnection.Execute(updateQuery, new
+                        dbConnection.Execute(insertQuery, new
                         {
-                            RNGenerationStatus = record_idst.rn_generation_status,
-                            ErrorDescription = record_idst.error_description
+                            CertificateNo = policyNo,
+                            VerifiedPrem = netPremium,
+                            VerifiedGst = gst,
+                            VerifiedTotalPrem = finalPremium
                         });
+                        //record_idst.rn_generation_status = "IT Issue - No CB";
+                        //record_idst.error_description = "CB SI cannot be zero";
+                        // Update the existing record
+                        //var updateQuery = @"
+                        //    UPDATE ins.premium_validation
+                        //    SET rn_generation_status=@RNGenerationStatus
+                        //        error_description = @ErrorDescription
+                        //    WHERE certificate_no = @CertificateNo";
+
+                        //dbConnection.Execute(updateQuery, new
+                        //{
+                        //    RNGenerationStatus = record_idst.rn_generation_status,
+                        //    ErrorDescription = record_idst.error_description
+                        //});
                     }
                     else
                     {
@@ -1362,56 +1373,81 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
                     new { CertificateNo = osRNEData.policy_number.ToString() });
 
-                if (record != null && record.rn_generation_status ==null)
+                if (record == null)
                 {
                     decimal crosscheck1Value = crosscheck1.HasValue ? crosscheck1.Value : 0;
                     decimal crosscheck2Value = crosscheck2.HasValue ? crosscheck2.Value : 0;
-                    if (crosscheck1.HasValue)
+                    if (crosscheck1.HasValue && crosscheck2.HasValue)
                     {
                         if ((Math.Abs(crosscheck1.Value) <= 10) || ((Math.Abs(crosscheck1.Value) <= 10 && Math.Abs(crosscheck2Value) <= 10)))
                         {
-                            record.rn_generation_status = "RN Generation Awaited";
-                            record.final_remarks = "RN Generation Awaited";
-                            record.dispatch_status = "PDF Gen Under Process With CLICK PSS Team";
+                            var insertQuery = @"
+                    INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status)
+                    VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'RN Generation Awaited', 'RN Generation Awaited', 'PDF Gen Under Process With CLICK PSS Team')";
+
+                            dbConnection.Execute(insertQuery, new
+                            {
+                                CertificateNo = osRNEData.policy_number.ToString(),
+                                VerifiedPrem = netPremium,
+                                VerifiedGst = gst,
+                                VerifiedTotalPrem = finalPremium
+                            });
+                            //record.rn_generation_status = "RN Generation Awaited";
+                            //record.final_remarks = "RN Generation Awaited";
+                            //record.dispatch_status = "PDF Gen Under Process With CLICK PSS Team";
                         }
                         else if ((Math.Abs(crosscheck1.Value) > 10) || (Math.Abs(crosscheck1.Value) > 10 && Math.Abs(crosscheck2Value) <= 10))
                         {
-                            record.rn_generation_status = "IT Issue - QC Failed";
-                            record.final_remarks = "IT Issues";
-                            record.dispatch_status = "Revised Extraction REQ From IT Team QC Failed Cases";
-                            record.error_description = "Premium verification failed due to premium difference of more than 10 rupees";
+                            var insertQuery = @"
+                            INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status, error_description)
+                            VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - QC Failed', 'IT Issues', 'Revised Extraction REQ From IT Team QC Failed Cases', 'Premium verification failed due to premium difference of more than 10 rupees')";
+
+                            dbConnection.Execute(insertQuery, new
+                            {
+                                CertificateNo = osRNEData.policy_number.ToString(),
+                                VerifiedPrem = netPremium,
+                                VerifiedGst = gst,
+                                VerifiedTotalPrem = finalPremium,
+                            });
+                            //record.rn_generation_status = "IT Issue - QC Failed";
+                            //record.final_remarks = "IT Issues";
+                            //record.dispatch_status = "Revised Extraction REQ From IT Team QC Failed Cases";
+                            //record.error_description = "Premium verification failed due to premium difference of more than 10 rupees";
                         }
                         else if (Math.Abs(crosscheck1.Value) <= 10 && Math.Abs(crosscheck2Value) > 10)
                         {
-                            record.rn_generation_status = "IT Issue - Upsell QC Failed";
+                            var insertQuery = @"
+                            INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status, error_description)
+                            VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - Upsell QC Failed')";
+
+                            dbConnection.Execute(insertQuery, new
+                            {
+                                CertificateNo = osRNEData.policy_number.ToString(),
+                                VerifiedPrem = netPremium,
+                                VerifiedGst = gst,
+                                VerifiedTotalPrem = finalPremium,
+                            });
+
+                            //record.rn_generation_status = "IT Issue - Upsell QC Failed";
                         }
                         else if (Math.Abs(crosscheck1.Value) > 10 && Math.Abs(crosscheck2Value) > 10)
                         {
-                            record.rn_generation_status = "IT Issue - QC Failed";
+                            // record.rn_generation_status = "IT Issue - QC Failed";
+
+                            var insertQuery = @"
+                            INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status, error_description)
+                            VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - QC Failed')";
+
+                            dbConnection.Execute(insertQuery, new
+                            {
+                                CertificateNo = osRNEData.policy_number.ToString(),
+                                VerifiedPrem = netPremium,
+                                VerifiedGst = gst,
+                                VerifiedTotalPrem = finalPremium,
+                            });
                         }
                     }
-                    // Update the existing record
-                    var updateQuery = @"
-                UPDATE ins.premium_validation
-                SET verified_prem = @VerifiedPrem,
-                    verified_gst = @VerifiedGst,
-                    verified_total_prem = @VerifiedTotalPrem,
-                    rn_generation_status=@RNGenerationStatus,
-                    final_remarks=@FinalRemarks,
-                    dispatch_status=@DispatchStatus
-                WHERE certificate_no = @CertificateNo"
-                    ;
-
-                    dbConnection.Execute(updateQuery, new
-                    {
-                        VerifiedPrem = netPremium,
-                        VerifiedGst = gst,
-                        VerifiedTotalPrem = finalPremium,
-                        CertificateNo = policyNo,
-                        RNGenerationStatus=record.rn_generation_status,
-                        FinalRemarks=record.final_remarks,
-                        DispatchStatus=record.dispatch_status
-                    });
+                 
                 }
                 
             }
@@ -2108,7 +2144,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             var columnNames = new List<string>();
             IEnumerable<IdstData> idstData = await GetIdstRenewalData(policyNo);
             var finalPremiumValues = new List<decimal?>();
-            
+
+            decimal? baseCrosscheck = 0;
+            decimal? upsellCrosscheck = 0;
+            List<decimal?> basesumInsuredList = new List<decimal?>();
+            List<decimal?> upsellsumInsuredList = new List<decimal?>();
             foreach (var row in osRNEData)
             {
                 var policNo16 = row.policy_number;
@@ -2251,487 +2291,383 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 var eldestMember = ageValues.Max();
                 var numberOfMembers = noOfMembers;//calculate this field
                 int? count = noOfMembers;
-                List<decimal?> sumInsuredList = new List<decimal?>();
-                for (int i = 1; i <= noOfMembers; i++)
-                {
-                    decimal? sumInsured = (decimal?)row.GetType().GetProperty($"sum_insured{i}").GetValue(row);
-                    sumInsuredList.Add(sumInsured);
-                }
 
-                string searchUpsellType1 = "SI_UPSELL";
-                string searchUpsellType2 = "UPSELLBASESI_1";
-                bool containsUpsellType = upselltypeValues.Any(upsell => upsell != null &&
-                    (upsell.Contains(searchUpsellType1, StringComparison.OrdinalIgnoreCase) ||
-                     upsell.Contains(searchUpsellType2, StringComparison.OrdinalIgnoreCase)));
-                if (containsUpsellType)
+
+                //calculation of baseprem and crosscheck1 based on suminsured
+                if ((row.sum_insured1.HasValue && row.sum_insured1 != null) || (row.sum_insured2.HasValue && row.sum_insured2 != null) || (row.sum_insured3.HasValue && row.sum_insured4 != null) || (row.sum_insured5.HasValue && row.sum_insured5 != null) || (row.sum_insured6.HasValue && row.sum_insured6 != null))
                 {
-                    if (noOfMembers > 0)
+                    for (int i = 1; i <= noOfMembers; i++)
                     {
-                        if (upselltypeValues.Contains(searchUpsellType1, StringComparer.OrdinalIgnoreCase))
-                        {
-                            if (decimal.TryParse(upsellValue1, out decimal parsedValue1))
-                            {
-                                for (int i = 1; i <= noOfMembers; i++)
-                                {
-                                    if (noOfMembers >= 1)
-                                    {
-                                        sumInsuredList[0] = parsedValue1;
-                                    }
-                                    if (noOfMembers >= 2)
-                                    {
-                                        sumInsuredList[1] = parsedValue1;
-                                    }
-                                    if (noOfMembers >= 3)
-                                    {
-                                        sumInsuredList[2] = parsedValue1;
-                                    }
-                                    if (noOfMembers >= 4)
-                                    {
-                                        sumInsuredList[3] = parsedValue1;
-                                    }
-                                    if (noOfMembers >= 5)
-                                    {
-                                        sumInsuredList[4] = parsedValue1;
-                                    }
-                                    if (noOfMembers >= 6)
-                                    {
-                                        sumInsuredList[5] = parsedValue1;
-                                    }
-                                }
-                            }
-                        }
-                        else if (upselltypeValues.Contains(searchUpsellType2, StringComparer.OrdinalIgnoreCase))
-                        {
-                            if (decimal.TryParse(upsellValue1, out decimal parsedValue2))
-                            {
-                                for (int i = 1; i <= noOfMembers; i++)
-                                {
-                                    if (noOfMembers >= 1)
-                                    {
-                                        sumInsuredList[0] = parsedValue2;
-                                    }
-                                    if (noOfMembers >= 2)
-                                    {
-                                        sumInsuredList[1] = parsedValue2;
-                                    }
-                                    if (noOfMembers >= 3)
-                                    {
-                                        sumInsuredList[2] = parsedValue2;
-                                    }
-                                    if (noOfMembers >= 4)
-                                    {
-                                        sumInsuredList[3] = parsedValue2;
-                                    }
-                                    if (noOfMembers >= 5)
-                                    {
-                                        sumInsuredList[4] = parsedValue2;
-                                    }
-                                    if (noOfMembers >= 6)
-                                    {
-                                        sumInsuredList[5] = parsedValue2;
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            for (int i = 1; i <= noOfMembers; i++)
-                            {
-                                if (decimal.TryParse(upsellValue1, out decimal parsedValue1))
-                                {
-                                    sumInsuredList[0] = parsedValue1;
-                                }
-                                if (noOfMembers > 1 && decimal.TryParse(upsellValue2, out decimal parsedValue2))
-                                {
-                                    sumInsuredList[1] = parsedValue2;
-                                }
-                                if (noOfMembers > 2 && decimal.TryParse(upsellValue3, out decimal parsedValue3))
-                                {
-                                    sumInsuredList[2] = parsedValue3;
-                                }
-                                if (noOfMembers > 3 && decimal.TryParse(upsellValue4, out decimal parsedValue4))
-                                {
-                                    sumInsuredList[3] = parsedValue4;
-                                }
-                                if (noOfMembers > 4 && decimal.TryParse(upsellValue5, out decimal parsedValue5))
-                                {
-                                    sumInsuredList[4] = parsedValue5;
-                                }
-                                if (noOfMembers > 5 && decimal.TryParse(upsellValue5, out decimal parsedValue6)) // Assuming same value for siSix
-                                {
-                                    sumInsuredList[5] = parsedValue6;
-                                }
-                            }
-                        }
+                        decimal? sumInsured = (decimal?)row.GetType().GetProperty($"sum_insured{i}").GetValue(row);
+                        basesumInsuredList.Add(sumInsured);
                     }
-                };
 
-                decimal? totalsuminsured = sumInsuredList.Sum(si => si ?? 0);
+                    decimal? totalbasesuminsured = basesumInsuredList.Sum(si => si ?? 0);
 
-                string searchOnlineDescText = "ONLINE_DISCOUNT";
-                bool containsOnlineDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchOnlineDescText, StringComparison.OrdinalIgnoreCase));
-                decimal? resultSearchOnlineDescText = containsOnlineDescText ? 1 : 0;
+                    string searchOnlineDescText = "ONLINE_DISCOUNT";
+                    bool containsOnlineDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchOnlineDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchOnlineDescText = containsOnlineDescText ? 1 : 0;
 
-                string searchDeductibleDescText = "DEDUCTIBLE_DISCOUNT";
-                bool containsdeuctibleDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchDeductibleDescText, StringComparison.OrdinalIgnoreCase));
-                decimal? resultSearchdeuctibleDescText = containsdeuctibleDescText ? 1 : 0;
+                    string searchDeductibleDescText = "DEDUCTIBLE_DISCOUNT";
+                    bool containsdeuctibleDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchDeductibleDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchdeuctibleDescText = containsdeuctibleDescText ? 1 : 0;
 
-                string searcFamilyDescText = "FAMILY_DISCOUNT";
-                bool containsFamilyDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searcFamilyDescText, StringComparison.OrdinalIgnoreCase));
-                decimal? resultSearchFamilyDescText = containsFamilyDescText ? 1 : 0;
+                    string searcFamilyDescText = "FAMILY_DISCOUNT";
+                    bool containsFamilyDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searcFamilyDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchFamilyDescText = containsFamilyDescText ? 1 : 0;
 
-                string searchEmployeeDescText = "EMPLOYEE_DISCOUNT";
-                bool containsEmployeeDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchEmployeeDescText, StringComparison.OrdinalIgnoreCase));
-                decimal? resultSearchEmployeeDescText = containsEmployeeDescText ? 1 : 0;
+                    string searchEmployeeDescText = "EMPLOYEE_DISCOUNT";
+                    bool containsEmployeeDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchEmployeeDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchEmployeeDescText = containsEmployeeDescText ? 1 : 0;
 
-                string searchLoyaltyDescText = "LOYALTY_DISCOUNT";
-                bool containsLoyaltyDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchLoyaltyDescText, StringComparison.OrdinalIgnoreCase));
-                decimal? resultLoyaltyDescText = containsLoyaltyDescText ? 1 : 0;
+                    string searchLoyaltyDescText = "LOYALTY_DISCOUNT";
+                    bool containsLoyaltyDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchLoyaltyDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultLoyaltyDescText = containsLoyaltyDescText ? 1 : 0;
 
-                string searchCombiDescText = "COMBI_DISCOUNT";
-                bool containsCombiDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchCombiDescText, StringComparison.OrdinalIgnoreCase));
-                decimal? resultCombiDescText = containsCombiDescText ? 1 : 0;
+                    string searchCombiDescText = "COMBI_DISCOUNT";
+                    bool containsCombiDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchCombiDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultCombiDescText = containsCombiDescText ? 1 : 0;
 
-                decimal? deductablesInsured1 = row.insured_deductable1;//c99
-                decimal? loyaltyDiscount = resultLoyaltyDescText;// row.loyalty_discount;//c798
-                decimal? employeeDiscount = resultSearchEmployeeDescText;//c799
-                decimal? onlineDiscount = resultSearchOnlineDescText;//c800
-
-
-                decimal? combiDiscounts = resultCombiDescText;//C803
-                var policyType = row.policy_type;
-
-                var policyperiod = row.policy_period;//c14
-
-                List<string> insuredRelations = new List<string>();
-
-                // Loop through the relation fields (1 to 12) and add them to the list
-                for (int i = 1; i <= 12; i++)
-                {
-                    // Dynamically access the properties and add them to the list
-                    var insuredRelation = row.GetType().GetProperty($"txt_insured_relation{i}")?.GetValue(row)?.ToString();
-                    insuredRelations.Add(insuredRelation);
-                }
+                    decimal? deductablesInsured1 = row.insured_deductable1;//c99
+                    decimal? loyaltyDiscount = resultLoyaltyDescText;// row.loyalty_discount;//c798
+                    decimal? employeeDiscount = resultSearchEmployeeDescText;//c799
+                    decimal? onlineDiscount = resultSearchOnlineDescText;//c800
 
 
-               List<decimal?> cumulativeBonusList = new List<decimal?>();
+                    decimal? combiDiscounts = resultCombiDescText;//C803
+                    var policyType = row.policy_type;
 
-                for (int i = 1; i <= noOfMembers; i++)
-                {
-                    decimal? bonusValue = Convert.ToDecimal(row.GetType().GetProperty($"insured_cb{i}")?.GetValue(row));
-                    cumulativeBonusList.Add(bonusValue);
-                }
+                    var policyperiod = row.policy_period;//c14
 
-                decimal? cumulativeBonus = cumulativeBonusList.Sum(cb => cb ?? 0);
-                var c15 = row.tier_type;       //c15
-                var c16 = row.policyplan;//c16
+                    List<string> insuredRelations = new List<string>();
 
-                List<decimal> basicLoadingRates = new List<decimal>();
+                    // Loop through the relation fields (1 to 12) and add them to the list
+                    for (int i = 1; i <= 12; i++)
+                    {
+                        // Dynamically access the properties and add them to the list
+                        var insuredRelation = row.GetType().GetProperty($"txt_insured_relation{i}")?.GetValue(row)?.ToString();
+                        insuredRelations.Add(insuredRelation);
+                    }
 
-                for (int i = 1; i <= noOfMembers; i++)
-                {
-                    decimal? loadingRate = (decimal?)iDSTData.GetType().GetProperty($"loading_per_insured{i}")?.GetValue(iDSTData);
 
-                    basicLoadingRates.Add(loadingRate ?? 0);
-                }
+                    List<decimal?> cumulativeBonusList = new List<decimal?>();
 
-                var deductibleDiscountVal = deductableDiscount
-                         .Where(roww =>
-                             roww.Value is Hashtable rateDetails &&
-                             rateDetails["si"] != null && Convert.ToDecimal(rateDetails["si"]) == sumInsuredList[0] &&
-                             rateDetails["deductible"] != null && Convert.ToDecimal(rateDetails["deductible"]) == deductablesInsured1
-                         )
-                         .Select(roww =>
-                             roww.Value is Hashtable details && details["discount"] != null
-                             ? Convert.ToDecimal(details["discount"])
-                             : (decimal?)null
-                         )
-                         .FirstOrDefault();
-                decimal? deductibleDiscount = deductibleDiscountVal ?? 0;
-                decimal? loyaltyDiscountValue = loyaltyDiscount;
-                loyaltyDiscountValue = loyaltyDiscount.HasValue && loyaltyDiscount.Value > 0 ? 2.5m : 0.0m;
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        decimal? bonusValue = Convert.ToDecimal(row.GetType().GetProperty($"insured_cb{i}")?.GetValue(row));
+                        cumulativeBonusList.Add(bonusValue);
+                    }
 
-                // Get the value from the 799th column (index 799)
-                decimal? employeeDiscountValue = employeeDiscount;
-                employeeDiscountValue = employeeDiscount.HasValue && employeeDiscount.Value > 0 ? 5.0m : 0.0m;
+                    decimal? cumulativeBonus = cumulativeBonusList.Sum(cb => cb ?? 0);
+                    var c15 = row.tier_type;       //c15
+                    var c16 = row.policyplan;//c16
 
-                decimal? onlineDiscountValue = onlineDiscount;
-                onlineDiscountValue = onlineDiscount.HasValue && onlineDiscount.Value > 0 ? 5.0m : 0.0m;
+                    List<decimal> basicLoadingRates = new List<decimal>();
 
-                // Calculate the discount based on the policy type and number of members
-                decimal? familyDiscountValue = CalculateFamilyDiscount(policyType, numberOfMembers);
-                decimal? combiDiscountValue = CalculateCombiDiscount(combiDiscounts);
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        decimal? loadingRate = (decimal?)iDSTData.GetType().GetProperty($"loading_per_insured{i}")?.GetValue(iDSTData);
 
-                //// Calculate the percentage based on the policy period
-                decimal tenureDiscount = GetPolicyPercentage(policyperiod);
-                var columnName = GetColumnNameForPolicyPeriod(policyperiod);
-                if (columnName == null)
-                {
-                    throw new ArgumentException($"Invalid policy period: {policyperiod}");
-                }
-                // Construct the raw SQL query
-                var sql = $@"
+                        basicLoadingRates.Add(loadingRate ?? 0);
+                    }
+
+                    var deductibleDiscountVal = deductableDiscount
+                             .Where(roww =>
+                                 roww.Value is Hashtable rateDetails &&
+                                 rateDetails["si"] != null && Convert.ToDecimal(rateDetails["si"]) == basesumInsuredList[0] &&
+                                 rateDetails["deductible"] != null && Convert.ToDecimal(rateDetails["deductible"]) == deductablesInsured1
+                             )
+                             .Select(roww =>
+                                 roww.Value is Hashtable details && details["discount"] != null
+                                 ? Convert.ToDecimal(details["discount"])
+                                 : (decimal?)null
+                             )
+                             .FirstOrDefault();
+                    decimal? deductibleDiscount = deductibleDiscountVal ?? 0;
+                    decimal? loyaltyDiscountValue = loyaltyDiscount;
+                    loyaltyDiscountValue = loyaltyDiscount.HasValue && loyaltyDiscount.Value > 0 ? 2.5m : 0.0m;
+
+                    // Get the value from the 799th column (index 799)
+                    decimal? employeeDiscountValue = employeeDiscount;
+                    employeeDiscountValue = employeeDiscount.HasValue && employeeDiscount.Value > 0 ? 5.0m : 0.0m;
+
+                    decimal? onlineDiscountValue = onlineDiscount;
+                    onlineDiscountValue = onlineDiscount.HasValue && onlineDiscount.Value > 0 ? 5.0m : 0.0m;
+
+                    // Calculate the discount based on the policy type and number of members
+                    decimal? familyDiscountValue = CalculateFamilyDiscount(policyType, numberOfMembers);
+                    decimal? combiDiscountValue = CalculateCombiDiscount(combiDiscounts);
+
+                    //// Calculate the percentage based on the policy period
+                    decimal tenureDiscount = GetPolicyPercentage(policyperiod);
+                    var columnName = GetColumnNameForPolicyPeriod(policyperiod);
+                    if (columnName == null)
+                    {
+                        throw new ArgumentException($"Invalid policy period: {policyperiod}");
+                    }
+                    // Construct the raw SQL query
+                    var sql = $@"
                 SELECT {columnName}
                 FROM baserate
                 WHERE si = @p0 AND age = @p1 AND tier = @p2 AND product = @p3";
-                List<decimal?> basePremiumsList = new List<decimal?>();
-                decimal? basePrem = 0;
+                    List<decimal?> basePremiumsList = new List<decimal?>();
+                    decimal? basePrem = 0;
 
-                for (int i = 0; i < noOfMembers; i++)
-                {
-                    basePrem = baseRateHashTable
-                        .Where(row =>
-                            row.Value is Hashtable rateDetails &&
-                            (int)rateDetails["si"] == sumInsuredList[i] &&  // Using sumInsuredList[i]
-                            (int)rateDetails["age"] == insuredAges[i] &&
-                            rateDetails["tier"].ToString() == c15 &&
-                            rateDetails["product"].ToString() == c16)
-                        .Select(row =>
-                            row.Value is Hashtable details &&
-                            details[columnName] != null
-                                ? Convert.ToDecimal(details[columnName])
-                                : (decimal?)null)
-                        .FirstOrDefault();
+                    for (int i = 0; i < noOfMembers; i++)
+                    {
+                        basePrem = baseRateHashTable
+                            .Where(row =>
+                                row.Value is Hashtable rateDetails &&
+                                (int)rateDetails["si"] == basesumInsuredList[i] &&  // Using sumInsuredList[i]
+                                (int)rateDetails["age"] == insuredAges[i] &&
+                                rateDetails["tier"].ToString() == c15 &&
+                                rateDetails["product"].ToString() == c16)
+                            .Select(row =>
+                                row.Value is Hashtable details &&
+                                details[columnName] != null
+                                    ? Convert.ToDecimal(details[columnName])
+                                    : (decimal?)null)
+                            .FirstOrDefault();
 
-                    basePremiumsList.Add(basePrem);
-                }
-                string condition = policyType; // Change to "INDIVIDUAL" to test the other case
+                        basePremiumsList.Add(basePrem);
+                    }
+                    string condition = policyType; // Change to "INDIVIDUAL" to test the other case
 
-                decimal? basePremium = CalculateResult(condition, basePremiumsList);
-                deductibleDiscount = deductibleDiscount / 100;
-                var resultPremium = basePremium * deductibleDiscount;
-                decimal? basePremiumAfterDeductible = basePremium - resultPremium;
+                    decimal? basePremium = CalculateResult(condition, basePremiumsList);
+                    deductibleDiscount = deductibleDiscount / 100;
+                    var resultPremium = basePremium * deductibleDiscount;
+                    decimal? basePremiumAfterDeductible = basePremium - resultPremium;
 
 
-                List<decimal?> loadingPremList = new List<decimal?>();
-                for (int i = 0; i < noOfMembers; i++)
-                {
-                    decimal? basePre = basePremiumsList[i];
-                    decimal? loadingRate = basicLoadingRates[i];
-                    decimal? loadingPremm = CalculateLoadingPrem(basePre, loadingRate / 100);
-                    loadingPremList.Add(loadingPremm);
-                }                
-                decimal? loadingPrem = loadingPremList.Sum();
+                    List<decimal?> loadingPremList = new List<decimal?>();
+                    for (int i = 0; i < noOfMembers; i++)
+                    {
+                        decimal? basePre = basePremiumsList[i];
+                        decimal? loadingRate = basicLoadingRates[i];
+                        decimal? loadingPremm = CalculateLoadingPrem(basePre, loadingRate / 100);
+                        loadingPremList.Add(loadingPremm);
+                    }
+                    decimal? loadingPrem = loadingPremList.Sum();
 
-                decimal? BaseAndLoading = basePremiumAfterDeductible + loadingPrem;
-                decimal? BaseAndLoadingLoyaltyDiscount = loyaltyDiscountValue / 100 * BaseAndLoading;
-                decimal? BaseAndLoadingEmployeeDiscount = employeeDiscountValue / 100 * BaseAndLoading;
-                decimal? BaseAndLoadingOnlineDiscount = (onlineDiscountValue / 100) * BaseAndLoading;
-                decimal? BaseAndLoadingFamilyDiscount = familyDiscountValue * BaseAndLoading;
+                    decimal? BaseAndLoading = basePremiumAfterDeductible + loadingPrem;
+                    decimal? BaseAndLoadingLoyaltyDiscount = loyaltyDiscountValue / 100 * BaseAndLoading;
+                    decimal? BaseAndLoadingEmployeeDiscount = employeeDiscountValue / 100 * BaseAndLoading;
+                    decimal? BaseAndLoadingOnlineDiscount = (onlineDiscountValue / 100) * BaseAndLoading;
+                    decimal? BaseAndLoadingFamilyDiscount = familyDiscountValue * BaseAndLoading;
 
-                decimal?[] cappedDiscountValues = new decimal?[]
-                  {
+                    decimal?[] cappedDiscountValues = new decimal?[]
+                      {
                             BaseAndLoadingLoyaltyDiscount, // Value from cell C158
                             BaseAndLoadingEmployeeDiscount, // Value from cell C159
                             BaseAndLoadingOnlineDiscount, // Value from cell C160
                             BaseAndLoadingFamilyDiscount  // Value from cell C161
-                  };
+                      };
 
-                decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
-                decimal? combiDiscount = (BaseAndLoading - cappedDiscount) * combiDiscountValue;
-                decimal? longTermDiscount = CalculatelongTermDiscount(BaseAndLoading, cappedDiscount, combiDiscount, tenureDiscount);
-                decimal? oSBasePremium = BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount;
-                oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null;
+                    decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
+                    decimal? combiDiscount = (BaseAndLoading - cappedDiscount) * combiDiscountValue;
+                    decimal? longTermDiscount = CalculatelongTermDiscount(BaseAndLoading, cappedDiscount, combiDiscount, tenureDiscount);
+                    decimal? oSBasePremium = BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount;
+                    oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null;
 
 
-                decimal? unlimitedRestoreValue = 0;
-                if (siRiderThreeDataTable.Rows.Count >= 1)
-                {
-                    foreach (DataRow itemRow in siRiderThreeDataTable.Rows)
-
-                        unlimitedRestoreValue = 1;
-                }
-
-                // Apply the conditional logic
-                decimal? unlimitedRestore = unlimitedRestoreValue > 0 ? oSBasePremium * 0.005m : 0;//calculation required
-                decimal? finalBasePremium = oSBasePremium + unlimitedRestore;
-                decimal? SI = 0;
-                string Opt = "N";
-                if (siRiderOneDataTable.Rows.Count >= 1)
-                {
-                    foreach (DataRow itemRow in siRiderOneDataTable.Rows)
+                    decimal? unlimitedRestoreValue = 0;
+                    if (siRiderThreeDataTable.Rows.Count >= 1)
                     {
-                        Opt = "Y";
-                        object siValueObject = itemRow["SIValue"];
-                        SI = Convert.ToDecimal(siValueObject);
-                    }
-                }
-                //var CIVariant1 = string.IsNullOrEmpty(iDSTData.insured1_information2_1) == null ? "9" : iDSTData.insured1_information2_1;
-                //var CIVariant2 = string.IsNullOrEmpty(iDSTData.insured1_information2_2) == null ? "9" : iDSTData.insured1_information2_2;
-                //var CIVariant3 = string.IsNullOrEmpty(iDSTData.insured1_information2_3) == null ? "9" : iDSTData.insured1_information2_3;
-                //var CIVariant4 = string.IsNullOrEmpty(iDSTData.insured1_information2_4) == null ? "9" : iDSTData.insured1_information2_4;
-                //var CIVariant5 = string.IsNullOrEmpty(iDSTData.insured1_information2_5) == null ? "9" : iDSTData.insured1_information2_5;
-                //var CIVariant6 = string.IsNullOrEmpty(iDSTData.insured1_information2_6) == null ? "9" : iDSTData.insured1_information2_6;
-                //var CIVariant7 = string.IsNullOrEmpty(iDSTData.insured1_information2_7) == null ? "9" : iDSTData.insured1_information2_7;
-                //var CIVariant8 = string.IsNullOrEmpty(iDSTData.insured1_information2_8) == null ? "9" : iDSTData.insured1_information2_8;
-                //var CIVariant9 = string.IsNullOrEmpty(iDSTData.insured1_information2_9) == null ? "9" : iDSTData.insured1_information2_9;
-                //var CIVariant10 = string.IsNullOrEmpty(iDSTData.insured1_information2_10) == null? "9" : iDSTData.insured1_information2_10;
-                //var CIVariant11 = string.IsNullOrEmpty(iDSTData.insured1_information2_11) == null ? "9" : iDSTData.insured1_information2_11;
-                //var CIVariant12 = string.IsNullOrEmpty(iDSTData.insured1_information2_12) == null ? "9" : iDSTData.insured1_information2_12;
-                List<decimal> ciVariants = new List<decimal>();
-                for (int i = 1; i <= noOfMembers; i++)
-                {
-                    decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
+                        foreach (DataRow itemRow in siRiderThreeDataTable.Rows)
 
-                    ciVariants.Add(ciVariant ?? 9);
-                }
-               // decimal? CIVariant = SI != 0 ? 9 : 0;
-                var policyPeriod = GetColumnNameForPolicyPeriod(policyperiod);
-                if (policyPeriod == null)
-                {
-                    throw new ArgumentException($"Invalid policy period: {policyperiod}");
-                }
-                var sqlpolicyPeriod = $@"
+                            unlimitedRestoreValue = 1;
+                    }
+
+                    // Apply the conditional logic
+                    decimal? unlimitedRestore = unlimitedRestoreValue > 0 ? oSBasePremium * 0.005m : 0;//calculation required
+                    decimal? finalBasePremium = oSBasePremium + unlimitedRestore;
+                    decimal? SI = 0;
+                    string Opt = "N";
+                    if (siRiderOneDataTable.Rows.Count >= 1)
+                    {
+                        foreach (DataRow itemRow in siRiderOneDataTable.Rows)
+                        {
+                            Opt = "Y";
+                            object siValueObject = itemRow["SIValue"];
+                            SI = Convert.ToDecimal(siValueObject);
+                        }
+                    }
+                    //var CIVariant1 = string.IsNullOrEmpty(iDSTData.insured1_information2_1) == null ? "9" : iDSTData.insured1_information2_1;
+                    //var CIVariant2 = string.IsNullOrEmpty(iDSTData.insured1_information2_2) == null ? "9" : iDSTData.insured1_information2_2;
+                    //var CIVariant3 = string.IsNullOrEmpty(iDSTData.insured1_information2_3) == null ? "9" : iDSTData.insured1_information2_3;
+                    //var CIVariant4 = string.IsNullOrEmpty(iDSTData.insured1_information2_4) == null ? "9" : iDSTData.insured1_information2_4;
+                    //var CIVariant5 = string.IsNullOrEmpty(iDSTData.insured1_information2_5) == null ? "9" : iDSTData.insured1_information2_5;
+                    //var CIVariant6 = string.IsNullOrEmpty(iDSTData.insured1_information2_6) == null ? "9" : iDSTData.insured1_information2_6;
+                    //var CIVariant7 = string.IsNullOrEmpty(iDSTData.insured1_information2_7) == null ? "9" : iDSTData.insured1_information2_7;
+                    //var CIVariant8 = string.IsNullOrEmpty(iDSTData.insured1_information2_8) == null ? "9" : iDSTData.insured1_information2_8;
+                    //var CIVariant9 = string.IsNullOrEmpty(iDSTData.insured1_information2_9) == null ? "9" : iDSTData.insured1_information2_9;
+                    //var CIVariant10 = string.IsNullOrEmpty(iDSTData.insured1_information2_10) == null? "9" : iDSTData.insured1_information2_10;
+                    //var CIVariant11 = string.IsNullOrEmpty(iDSTData.insured1_information2_11) == null ? "9" : iDSTData.insured1_information2_11;
+                    //var CIVariant12 = string.IsNullOrEmpty(iDSTData.insured1_information2_12) == null ? "9" : iDSTData.insured1_information2_12;
+                    List<decimal> ciVariants = new List<decimal>();
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
+
+                        ciVariants.Add(ciVariant ?? 9);
+                    }
+                    // decimal? CIVariant = SI != 0 ? 9 : 0;
+                    var policyPeriod = GetColumnNameForPolicyPeriod(policyperiod);
+                    if (policyPeriod == null)
+                    {
+                        throw new ArgumentException($"Invalid policy period: {policyperiod}");
+                    }
+                    var sqlpolicyPeriod = $@"
                 SELECT {policyPeriod}
                 FROM cirates
                 WHERE age = @p0 AND ci_variant = @p1";
-                List<decimal?> ciRates = new List<decimal?>();
-                for (int i = 0; i < insuredAges.Count; i++)
-                {
-                    if (insuredAges[i].HasValue)  // Check if the age is valid
+                    List<decimal?> ciRates = new List<decimal?>();
+                    for (int i = 0; i < insuredAges.Count; i++)
                     {
-                        decimal? ciRate = await GetCIRate(insuredAges[i].Value, ciVariants[i], policyPeriod, sqlpolicyPeriod, cirates);
-                        ciRates.Add(ciRate);  // Add the resulting CI rate to the list
+                        if (insuredAges[i].HasValue)  // Check if the age is valid
+                        {
+                            decimal? ciRate = await GetCIRate(insuredAges[i].Value, ciVariants[i], policyPeriod, sqlpolicyPeriod, cirates);
+                            ciRates.Add(ciRate);  // Add the resulting CI rate to the list
+                        }
+                        else
+                        {
+                            ciRates.Add(null);  // If the age is invalid, add a null CI rate
+                        }
                     }
-                    else
+                    List<decimal?> premiums = new List<decimal?>();
+                    foreach (var ciRate in ciRates)
                     {
-                        ciRates.Add(null);  // If the age is invalid, add a null CI rate
+                        decimal? processedCiRate = GetCiRatesValues(SI, ciRate);  // Process the CI rate using the existing method
+                        premiums.Add(processedCiRate);  // Add the processed rate to the list
                     }
-                }
-                List<decimal?> premiums = new List<decimal?>();
-                foreach (var ciRate in ciRates)
-                {
-                    decimal? processedCiRate = GetCiRatesValues(SI, ciRate);  // Process the CI rate using the existing method
-                    premiums.Add(processedCiRate);  // Add the processed rate to the list
-                }
-                decimal? premium = premiums.Sum();
-                List<decimal?> loadingPremiumvalues = new List<decimal?>();
-                for (int i = 1; i < noOfMembers; i++)
-                {
-                    decimal? premiumm = premiums[i]; // Fetch the premium for the current member
-                    decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
-                    decimal? loadingPremm = CalculateResultMyBaseLoading(premium, basicLoadingRate);
+                    decimal? premium = premiums.Sum();
+                    List<decimal?> loadingPremiumvalues = new List<decimal?>();
+                    for (int i = 1; i < noOfMembers; i++)
+                    {
+                        decimal? premiumm = premiums[i]; // Fetch the premium for the current member
+                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+                        decimal? loadingPremm = CalculateResultMyBaseLoading(premium, basicLoadingRate);
 
-                    // Store the result in the list
-                    loadingPremiumvalues.Add(loadingPrem);
-                }
-                decimal? loadingPremium = loadingPremiumvalues.Sum();
-                decimal? cIloyaltyDiscountValue;
-                decimal? cIloyaltyDiscount;
-                GetLoyaltyDiscount(loyaltyDiscountValue, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
-                //GetLoyaltyDiscount(loyaltyDiscount, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
-                // Get the value from the 799th column (index 799)
-                decimal? cIemployeeDiscountValue = employeeDiscount;
-                decimal? cIonlineDiscountValue = onlineDiscount;
-                decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
+                        // Store the result in the list
+                        loadingPremiumvalues.Add(loadingPrem);
+                    }
+                    decimal? loadingPremium = loadingPremiumvalues.Sum();
+                    decimal? cIloyaltyDiscountValue;
+                    decimal? cIloyaltyDiscount;
+                    GetLoyaltyDiscount(loyaltyDiscountValue, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
+                    //GetLoyaltyDiscount(loyaltyDiscount, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
+                    // Get the value from the 799th column (index 799)
+                    decimal? cIemployeeDiscountValue = employeeDiscount;
+                    decimal? cIonlineDiscountValue = onlineDiscount;
+                    decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
 
-                decimal? cIBaseAndLoading = premium + loadingPremium;
-                decimal? cIBaseLoyaltyDisocunt = cIloyaltyDiscount * cIBaseAndLoading;
-                decimal? cIBaseEmployeeDisocunt = employeeDiscountValue / 100 * cIBaseAndLoading;
-                decimal? cIBaseOnlineDisocunt = onlineDiscountValue / 100 * cIBaseAndLoading;
-                decimal? cIBaseFamilyDisocunt = cIBaseAndLoading * cIFamilyDiscountValue;
-                decimal?[] cIcappedDiscountValues = new decimal?[]
-                {
+                    decimal? cIBaseAndLoading = premium + loadingPremium;
+                    decimal? cIBaseLoyaltyDisocunt = cIloyaltyDiscount * cIBaseAndLoading;
+                    decimal? cIBaseEmployeeDisocunt = employeeDiscountValue / 100 * cIBaseAndLoading;
+                    decimal? cIBaseOnlineDisocunt = onlineDiscountValue / 100 * cIBaseAndLoading;
+                    decimal? cIBaseFamilyDisocunt = cIBaseAndLoading * cIFamilyDiscountValue;
+                    decimal?[] cIcappedDiscountValues = new decimal?[]
+                    {
                             cIBaseLoyaltyDisocunt, // Value from cell C158
                             cIBaseEmployeeDisocunt, // Value from cell C159
                             cIBaseOnlineDisocunt, // Value from cell C160
                             cIBaseFamilyDisocunt  // Value from cell C161
-                };
-                decimal? cicappedDiscount = CalculateCappedDiscount(cappedDiscountValues, cIBaseAndLoading);
-                decimal?[] cicappedDiscountValues = new decimal?[]
-                  {
+                    };
+                    decimal? cicappedDiscount = CalculateCappedDiscount(cappedDiscountValues, cIBaseAndLoading);
+                    decimal?[] cicappedDiscountValues = new decimal?[]
+                      {
                             cIBaseLoyaltyDisocunt, // Value from cell C158
                             cIBaseEmployeeDisocunt, // Value from cell C159
                             cIBaseOnlineDisocunt, // Value from cell C160
                             cIBaseFamilyDisocunt  // Value from cell C161
-                  };
-                decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
-                decimal? CIBaselongTermDiscount = (cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount;
+                      };
+                    decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
+                    decimal? CIBaselongTermDiscount = (cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount;
 
-                decimal? cIBaseBaseCoverPremium = cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount;
+                    decimal? cIBaseBaseCoverPremium = cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount;
 
-                string cashBenefitOpt = "N";
-                decimal? hdcsi = 0;
-                if (siRiderTwoDataTable.Rows.Count >= 1)
-                {
-                    foreach (DataRow itemRow in siRiderTwoDataTable.Rows)
+                    string cashBenefitOpt = "N";
+                    decimal? hdcsi = 0;
+                    if (siRiderTwoDataTable.Rows.Count >= 1)
                     {
-                        cashBenefitOpt = "Y";
-                        object hdcsiValueObject = itemRow["SIValue"];
-                        hdcsi = Convert.ToDecimal(hdcsiValueObject);
+                        foreach (DataRow itemRow in siRiderTwoDataTable.Rows)
+                        {
+                            cashBenefitOpt = "Y";
+                            object hdcsiValueObject = itemRow["SIValue"];
+                            hdcsi = Convert.ToDecimal(hdcsiValueObject);
+                        }
                     }
-                }
 
-                var insuredRelationTAGValues = new List<string?>();
-                for (int i = 0; i < insuredRelations.Count; i++)
-                {
-                    var insuredRelation = insuredRelations[i];
-                    var insuredRelationTAG = relations
-                        .Where(roww =>
-                            roww.Value is Hashtable rateDetails &&
-                            rateDetails["insured_relation"]?.ToString() == insuredRelation)
-                        .Select(roww =>
-                            roww.Value is Hashtable details && details["relation_tag"] != null
-                            ? Convert.ToString(details["relation_tag"])
-                            : (string?)null)
-                        .FirstOrDefault();
+                    var insuredRelationTAGValues = new List<string?>();
+                    for (int i = 0; i < insuredRelations.Count; i++)
+                    {
+                        var insuredRelation = insuredRelations[i];
+                        var insuredRelationTAG = relations
+                            .Where(roww =>
+                                roww.Value is Hashtable rateDetails &&
+                                rateDetails["insured_relation"]?.ToString() == insuredRelation)
+                            .Select(roww =>
+                                roww.Value is Hashtable details && details["relation_tag"] != null
+                                ? Convert.ToString(details["relation_tag"])
+                                : (string?)null)
+                            .FirstOrDefault();
 
-                    insuredRelationTAGValues.Add(insuredRelationTAG);
-                }
-                // Perform the count and apply the logic
-                string aValue = ProcessCountForA(insuredRelationTAGValues);
-                string pValue = ProcessCountForP(insuredRelationTAGValues);
-                string cValue = ProcessCountForC(insuredRelationTAGValues);
-                string A = aValue;
+                        insuredRelationTAGValues.Add(insuredRelationTAG);
+                    }
+                    // Perform the count and apply the logic
+                    string aValue = ProcessCountForA(insuredRelationTAGValues);
+                    string pValue = ProcessCountForP(insuredRelationTAGValues);
+                    string cValue = ProcessCountForC(insuredRelationTAGValues);
+                    string A = aValue;
 
-                var hdcAgeBand = hdcrates
-                   .Where(roww =>
-                       roww.Value is Hashtable rateDetails &&
-                       rateDetails.ContainsKey("age") && rateDetails["age"] != null && (int)rateDetails["age"] == eldestMember &&
-                       rateDetails.ContainsKey("plan_type") && rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == A.ToString()
-                   )
-                   .Select(roww =>
-                       roww.Value is Hashtable details &&
-                       details.ContainsKey("age_band") && details["age_band"] != null
-                       ? details["age_band"].ToString()
-                       : null
-                   )
-                  .FirstOrDefault();
+                    var hdcAgeBand = hdcrates
+                       .Where(roww =>
+                           roww.Value is Hashtable rateDetails &&
+                           rateDetails.ContainsKey("age") && rateDetails["age"] != null && (int)rateDetails["age"] == eldestMember &&
+                           rateDetails.ContainsKey("plan_type") && rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == A.ToString()
+                       )
+                       .Select(roww =>
+                           roww.Value is Hashtable details &&
+                           details.ContainsKey("age_band") && details["age_band"] != null
+                           ? details["age_band"].ToString()
+                           : null
+                       )
+                      .FirstOrDefault();
 
-                string? P = pValue;
-                string? C = cValue;
-                string? familyDefn = (A ?? string.Empty) + (P ?? string.Empty) + (C ?? string.Empty);
-                familyDefn = familyDefn.Trim();
-                
-                // Construct the raw SQL query
-                var sqlperiod = $@"
+                    string? P = pValue;
+                    string? C = cValue;
+                    string? familyDefn = (A ?? string.Empty) + (P ?? string.Empty) + (C ?? string.Empty);
+                    familyDefn = familyDefn.Trim();
+
+                    // Construct the raw SQL query
+                    var sqlperiod = $@"
                 SELECT {columnName}
                 FROM hdcrates
                 WHERE si = @p0 AND age = @p1 AND age_band = @p2 AND plan_type=@p3";
 
-                // Execute the raw SQL query
-                var cashBenefitPremiumValue = hdcrates
-                   .Where(roww =>
-                       roww.Value is Hashtable rateDetails &&
-                       rateDetails["si"] != null && (rateDetails["si"] as int? ?? 0) == hdcsi &&
-                       rateDetails["age"] != null && (rateDetails["age"] as int? ?? 0) == eldestMember &&
-                       rateDetails["age_band"] != null && rateDetails["age_band"].ToString() == hdcAgeBand &&
-                       rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == familyDefn
-                   )
-                   .Select(roww =>
-                       roww.Value is Hashtable details && details[columnName] != null
-                       ? Convert.ToDecimal(details[columnName])
-                       : (decimal?)null
-                   )
-                   .FirstOrDefault();
-                decimal? cashBenefitSI = hdcsi;
+                    // Execute the raw SQL query
+                    var cashBenefitPremiumValue = hdcrates
+                       .Where(roww =>
+                           roww.Value is Hashtable rateDetails &&
+                           rateDetails["si"] != null && (rateDetails["si"] as int? ?? 0) == hdcsi &&
+                           rateDetails["age"] != null && (rateDetails["age"] as int? ?? 0) == eldestMember &&
+                           rateDetails["age_band"] != null && rateDetails["age_band"].ToString() == hdcAgeBand &&
+                           rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == familyDefn
+                       )
+                       .Select(roww =>
+                           roww.Value is Hashtable details && details[columnName] != null
+                           ? Convert.ToDecimal(details[columnName])
+                           : (decimal?)null
+                       )
+                       .FirstOrDefault();
+                    decimal? cashBenefitSI = hdcsi;
 
-                string? ageBand = hdcAgeBand;
-                cashBenefitPremiumValue = cashBenefitPremiumValue ?? 0m;
-                decimal? cashBenefitPremium = cashBenefitPremiumValue;
-                // Construct the raw SQL query
+                    string? ageBand = hdcAgeBand;
+                    cashBenefitPremiumValue = cashBenefitPremiumValue ?? 0m;
+                    decimal? cashBenefitPremium = cashBenefitPremiumValue;
+                    // Construct the raw SQL query
 
-                var dictionary = new Dictionary<string, List<string>>
+                    var dictionary = new Dictionary<string, List<string>>
                 {
                     { "2a", GenerateColumnNames("2a") },
                      { "2c", GenerateColumnNames("2c")},
@@ -2739,653 +2675,1242 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                       { "2a2c", Generate2A2PColumnNames("2a2c") }
                 };
 
-                var key = familyDefn.ToLower();
-                var columnNamesString = "";
-                if (dictionary.TryGetValue(key, out var columnValues))
-                {
-                    // Convert the list of column names to a single string
-                    columnNamesString = string.Join(", ", columnValues);
-                    Console.WriteLine($"Key: {key}");
-                    Console.WriteLine($"Column Values: {columnNamesString}");
-                }
-                ////{columnNamesString},p1, c1, c2, c3, p2,eldest_member_age_band, family_composition
-                var sqlhdcproportionsplit = $@"
+                    var key = familyDefn.ToLower();
+                    var columnNamesString = "";
+                    if (dictionary.TryGetValue(key, out var columnValues))
+                    {
+                        // Convert the list of column names to a single string
+                        columnNamesString = string.Join(", ", columnValues);
+                        Console.WriteLine($"Key: {key}");
+                        Console.WriteLine($"Column Values: {columnNamesString}");
+                    }
+                    ////{columnNamesString},p1, c1, c2, c3, p2,eldest_member_age_band, family_composition
+                    var sqlhdcproportionsplit = $@"
                 SELECT * 
                 FROM hdcproportionsplit
                 WHERE  eldest_member_age_band = @p0 AND family_composition = @p1";
-                //Execute the raw SQL query
+                    //Execute the raw SQL query
 
-                var results = hdcproportionsplit
-                         .Where(roww =>
-                         {
-                             if (roww.Value is Hashtable rateDetails)
+                    var results = hdcproportionsplit
+                             .Where(roww =>
                              {
-                                 // Check that "eldest_member_age_band" exists and is not null
-                                 var eldestMemberAgeBand = rateDetails["eldest_member_age_band"];
-                                 var deductible = rateDetails["family_composition"];
+                                 if (roww.Value is Hashtable rateDetails)
+                                 {
+                                     // Check that "eldest_member_age_band" exists and is not null
+                                     var eldestMemberAgeBand = rateDetails["eldest_member_age_band"];
+                                     var deductible = rateDetails["family_composition"];
 
-                                 return eldestMemberAgeBand != null &&
-                                        eldestMemberAgeBand.ToString() == hdcAgeBand && // Correct comparison for "eldest_member_age_band"
-                                        deductible != null &&
-                                        deductible.ToString() == familyDefn; // Correct comparison for "deductible"
+                                     return eldestMemberAgeBand != null &&
+                                            eldestMemberAgeBand.ToString() == hdcAgeBand && // Correct comparison for "eldest_member_age_band"
+                                            deductible != null &&
+                                            deductible.ToString() == familyDefn; // Correct comparison for "deductible"
+                                 }
+                                 return false;
+                             })
+                         .Select(roww =>
+                         {
+                             if (roww.Value is Hashtable details)
+                             {
+                                 // Only return a result if the necessary keys exist
+                                 return new
+                                 {
+                                     eldest_member_age_band = details["eldest_member_age_band"]?.ToString(), // Use null-conditional operator
+                                     family_composition = details["family_composition"]?.ToString(),
+                                     a1 = details["a1"]?.ToString(),
+                                     a2 = details["a2"]?.ToString(),
+                                     p1 = details["p1"]?.ToString(),
+                                     p2 = details["p2"]?.ToString(),
+                                     c1 = details["c1"]?.ToString(),
+                                     c2 = details["c2"]?.ToString()
+                                 };
                              }
-                             return false;
+                             return null; // Return null if `details` is not a Hashtable
                          })
-                     .Select(roww =>
+                         .Where(details => details != null) // Filter out null results
+                         .ToList(); // Get the results as a list
+                    var selectedValues = results.Select(r => new
+                    {
+                        a1 = Convert.ToDecimal(r.a1),
+                        a2 = Convert.ToDecimal(r.a2),
+                        p1 = Convert.ToDecimal(r.p1),
+                        p2 = Convert.ToDecimal(r.p2),
+                        c1 = Convert.ToDecimal(r.c1),
+                        c2 = Convert.ToDecimal(r.c2)
+                    }).FirstOrDefault();
+
+
+                    decimal? Insured_1 = selectedValues?.a1 * cashBenefitPremiumValue;
+                    decimal? Insured_2 = selectedValues?.a2 * cashBenefitPremiumValue;
+                    decimal? Insured_3 = 0m;
+                    decimal? Insured_4 = 0m;
+                    if (familyDefn == "2A 2P")
+                    {
+                        Insured_3 = selectedValues?.p1 * cashBenefitPremiumValue;
+                        Insured_4 = selectedValues?.p2 * cashBenefitPremiumValue;
+                    }
+                    if (familyDefn == "2A 2C")
+                    {
+                        Insured_3 = selectedValues?.c1 * cashBenefitPremiumValue;
+                        Insured_4 = (selectedValues?.c2) * cashBenefitPremiumValue;
+                    }
+
+                    decimal? Insured_5 = 0;
+                    decimal? Insured_6 = 0;
+                    decimal? Insured_7 = 0;
+                    decimal? Insured_8 = 0;
+                    decimal? Insured_9 = 0;
+                    decimal? Insured_10 = 0;
+                    decimal? Insured_11 = 0;
+                    decimal? Insured_12 = 0;
+
+
+                    List<decimal?> premiumCheckInsuredValues = new List<decimal?>();
+                    premiumCheckInsuredValues.Add(Insured_1);
+                    premiumCheckInsuredValues.Add(Insured_2);
+                    premiumCheckInsuredValues.Add(Insured_3);
+                    premiumCheckInsuredValues.Add(Insured_4);
+                    premiumCheckInsuredValues.Add(Insured_5);
+                    premiumCheckInsuredValues.Add(Insured_6);
+                    premiumCheckInsuredValues.Add(Insured_7);
+                    premiumCheckInsuredValues.Add(Insured_8);
+                    premiumCheckInsuredValues.Add(Insured_9);
+                    premiumCheckInsuredValues.Add(Insured_10);
+                    premiumCheckInsuredValues.Add(Insured_11);
+                    premiumCheckInsuredValues.Add(Insured_12);
+
+                    decimal? cashBenefitLoadingPremiumSum = premiumCheckInsuredValues.Sum();
+                    decimal? premiumCheck = cashBenefitLoadingPremiumSum - cashBenefitPremiumValue;
+
+                    // Calculate the result and handle errors              
+                    List<decimal?> cashBenefitLoadingPremiumValues = new List<decimal?>();
+                    for (int i = 0; i < noOfMembers; i++)
+                    {
+                        decimal? insuredValue = premiumCheckInsuredValues[i]; // Fetch the insured value for the current member
+                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+
+                        decimal? cashBenefit = CalculateLoadingPremium(insuredValue, basicLoadingRate / 100);
+                        cashBenefitLoadingPremiumValues.Add(cashBenefit);
+                    }
+
+                    decimal? cashBenefitLoadingPremium = cashBenefitLoadingPremiumValues.Sum();
+
+                    decimal? hDCBaseAndLoading = cashBenefitPremium + cashBenefitLoadingPremium;
+                    decimal? hDCBaseAndLoadingLoyaltyDiscount = hDCBaseAndLoading * cIloyaltyDiscount;
+                    decimal? hDCBaseAndLoadingEmployeeDiscount = hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue);
+                    onlineDiscountValue = onlineDiscountValue / 100;
+                    decimal? hDCOnlineDisocuntValue = hDCBaseAndLoading * (onlineDiscountValue);//GetOnlineDiscount(noOfMembers);
+                    decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
+                    decimal? hDCBaseAndLoadingFamilyDiscount = hDCBaseAndLoading * (familyDiscountValue);
+                    decimal?[] hDCcappedDiscountValues = new decimal?[]
                      {
-                         if (roww.Value is Hashtable details)
-                         {
-                             // Only return a result if the necessary keys exist
-                             return new
-                             {
-                                 eldest_member_age_band = details["eldest_member_age_band"]?.ToString(), // Use null-conditional operator
-                                 family_composition = details["family_composition"]?.ToString(),
-                                 a1 = details["a1"]?.ToString(),
-                                 a2 = details["a2"]?.ToString(),
-                                 p1 = details["p1"]?.ToString(),
-                                 p2 = details["p2"]?.ToString(),
-                                 c1 = details["c1"]?.ToString(),
-                                 c2 = details["c2"]?.ToString()
-                             };
-                         }
-                         return null; // Return null if `details` is not a Hashtable
-                     })
-                     .Where(details => details != null) // Filter out null results
-                     .ToList(); // Get the results as a list
-                var selectedValues = results.Select(r => new
-                {
-                    a1 = Convert.ToDecimal(r.a1),
-                    a2 = Convert.ToDecimal(r.a2),
-                    p1 = Convert.ToDecimal(r.p1),
-                    p2 = Convert.ToDecimal(r.p2),
-                    c1 = Convert.ToDecimal(r.c1),
-                    c2 = Convert.ToDecimal(r.c2)
-                }).FirstOrDefault();
-              
-
-                decimal? Insured_1 = selectedValues?.a1 * cashBenefitPremiumValue;
-                decimal? Insured_2 = selectedValues?.a2 * cashBenefitPremiumValue;
-                decimal? Insured_3 = 0m;
-                decimal? Insured_4 = 0m;
-                if (familyDefn == "2A 2P")
-                {
-                    Insured_3 = selectedValues?.p1 * cashBenefitPremiumValue;
-                    Insured_4 = selectedValues?.p2 * cashBenefitPremiumValue;
-                }
-                if (familyDefn == "2A 2C")
-                {
-                    Insured_3 = selectedValues?.c1 * cashBenefitPremiumValue;
-                    Insured_4 = (selectedValues?.c2) * cashBenefitPremiumValue;
-                }
-
-                decimal? Insured_5 = 0;
-                decimal? Insured_6 = 0;
-                decimal? Insured_7 = 0;
-                decimal? Insured_8 = 0;
-                decimal? Insured_9 = 0;
-                decimal? Insured_10 = 0;
-                decimal? Insured_11 = 0;
-                decimal? Insured_12 = 0;
-
-
-                List<decimal?> premiumCheckInsuredValues = new List<decimal?>();
-                premiumCheckInsuredValues.Add(Insured_1);
-                premiumCheckInsuredValues.Add(Insured_2);
-                premiumCheckInsuredValues.Add(Insured_3);
-                premiumCheckInsuredValues.Add(Insured_4);
-                premiumCheckInsuredValues.Add(Insured_5);
-                premiumCheckInsuredValues.Add(Insured_6);
-                premiumCheckInsuredValues.Add(Insured_7);
-                premiumCheckInsuredValues.Add(Insured_8);
-                premiumCheckInsuredValues.Add(Insured_9);
-                premiumCheckInsuredValues.Add(Insured_10);
-                premiumCheckInsuredValues.Add(Insured_11);
-                premiumCheckInsuredValues.Add(Insured_12);
-
-                decimal? cashBenefitLoadingPremiumSum = premiumCheckInsuredValues.Sum();
-                decimal? premiumCheck = cashBenefitLoadingPremiumSum - cashBenefitPremiumValue;
-
-                // Calculate the result and handle errors              
-                List<decimal?> cashBenefitLoadingPremiumValues = new List<decimal?>();
-                for (int i = 0; i < noOfMembers; i++)
-                {
-                    decimal? insuredValue = premiumCheckInsuredValues[i]; // Fetch the insured value for the current member
-                    decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
-
-                    decimal? cashBenefit = CalculateLoadingPremium(insuredValue, basicLoadingRate / 100);
-                    cashBenefitLoadingPremiumValues.Add(cashBenefit);
-                }
-                
-                decimal? cashBenefitLoadingPremium = cashBenefitLoadingPremiumValues.Sum();
-
-                decimal? hDCBaseAndLoading = cashBenefitPremium + cashBenefitLoadingPremium;
-                decimal? hDCBaseAndLoadingLoyaltyDiscount = hDCBaseAndLoading * cIloyaltyDiscount;
-                decimal? hDCBaseAndLoadingEmployeeDiscount = hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue);
-                onlineDiscountValue = onlineDiscountValue / 100;
-                decimal? hDCOnlineDisocuntValue = hDCBaseAndLoading * (onlineDiscountValue);//GetOnlineDiscount(noOfMembers);
-                decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
-                decimal? hDCBaseAndLoadingFamilyDiscount = hDCBaseAndLoading * (familyDiscountValue);
-                decimal?[] hDCcappedDiscountValues = new decimal?[]
-                 {
                             hDCBaseAndLoadingLoyaltyDiscount, // Value from cell C158
                             hDCBaseAndLoadingEmployeeDiscount, // Value from cell C159
                             hDCBaseAndLoadingOnlineDiscount, // Value from cell C160
                             hDCBaseAndLoadingFamilyDiscount  // Value from cell C161
-                 };
+                     };
 
-                decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
+                    decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
 
-                decimal? hDClongTermDiscount = (hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount;
+                    decimal? hDClongTermDiscount = (hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount;
 
-                decimal? hDCBaseCoverPremium = hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount;
+                    decimal? hDCBaseCoverPremium = hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount;
 
-                decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium);
+                    decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium);
 
-                decimal? GST = netPremium * 0.18m;
+                    decimal? GST = netPremium * 0.18m;
 
-                decimal? finalPremium = netPremium + GST;
+                    decimal? finalPremium = netPremium + GST;
 
-                decimal? Crosscheck = row.num_tot_premium - finalPremium;
-                decimal? Crosscheck2 = row.num_tot_premium - finalPremium;
+                    baseCrosscheck = row.num_tot_premium - finalPremium;
+                }
 
-                var crosscheck2 = Crosscheck2;
-
-                os = new OptimaSecureRNE
+                //calculation of upsellbaseprem and crosscheck2 based on upsell value
+                if (row.upselltype1 != null || row.upselltype2 != null || row.upselltype3 != null || row.upselltype4 != null || row.upselltype5 != null)
                 {
-                    prod_code = row.prod_code,
-                    prod_name = row.prod_name,
-                    policy_number = row.policy_number,
-                    batchid = row.batchid,
-                    customer_id = row.customer_id,
-                    customername = row.customername,
-                    txt_salutation = row.txt_salutation,
-                    location_code = row.location_code,
-                    txt_apartment = row.txt_apartment,
-                    txt_street = row.txt_street,
-                    txt_areavillage = row.txt_areavillage,
-                    txt_citydistrict = row.txt_citydistrict,
-                    txt_state = row.txt_state,
-                    state_code = row.state_code,
-                    state_regis = row.state_regis,
-                    txt_pincode = row.txt_pincode,
-                    txt_nationality = row.txt_nationality,
-                    txt_mobile = row.txt_mobile,
-                    txt_telephone = row.txt_telephone,
-                    txt_email = row.txt_email,
-                    txt_dealer_cd = row.txt_dealer_cd,//intermediary_code in gc mapping
-                    imdname = row.imdname,//intermediary_name in gc
-                    verticalname = row.verticalname,//psm_name in gc
-                    //ssm_name = row.ssm_name,
-                    txt_family = row.txt_family,
-                    isrnflag = row.isrnflag,//chk
-                    reference_num = row.reference_num,//proposal no in gc
-                    split_flag = row.split_flag,
-                    isvipflag = row.isvipflag,//chk 
-                    optima_secure_gst = /*row.GST,*/
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        var upsellValueStr = row.GetType().GetProperty($"upsellvalue{i}")?.GetValue(row) as string;
+                        decimal? sumInsured = null;
+                        if (!string.IsNullOrEmpty(upsellValueStr) && decimal.TryParse(upsellValueStr, out decimal parsedValue))
+                        {
+                            sumInsured = parsedValue;
+                        }
+                        upsellsumInsuredList.Add(sumInsured);
+                    }
+                    string searchUpsellType1 = "SI_UPSELL";
+                    string searchUpsellType2 = "UPSELLBASESI_1";
+                    bool containsUpsellType = upselltypeValues.Any(upsell => upsell != null &&
+                        (upsell.Contains(searchUpsellType1, StringComparison.OrdinalIgnoreCase) ||
+                         upsell.Contains(searchUpsellType2, StringComparison.OrdinalIgnoreCase)));
+                    if (containsUpsellType)
+                    {
+                        if (noOfMembers > 0)
+                        {
+                            if (upselltypeValues.Contains(searchUpsellType1, StringComparer.OrdinalIgnoreCase))
+                            {
+                                if (decimal.TryParse(upsellValue1, out decimal parsedValue1))
+                                {
+                                    for (int i = 1; i <= noOfMembers; i++)
+                                    {
+                                        upsellsumInsuredList[i - 1] = parsedValue1;
+                                    }
+                                }
+                            }
+                            else if (upselltypeValues.Contains(searchUpsellType2, StringComparer.OrdinalIgnoreCase))
+                            {
+                                if (decimal.TryParse(upsellValue1, out decimal parsedValue2))
+                                {
+                                    for (int i = 1; i <= noOfMembers; i++)
+                                    {
+                                        upsellsumInsuredList[i - 1] = parsedValue2;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                for (int i = 0; i <= noOfMembers; i++)
+                                {
+                                    if (decimal.TryParse(upsellValue1, out decimal parsedValue1))
+                                    {
+                                        upsellsumInsuredList[0] = parsedValue1;
+                                    }
+                                    if (noOfMembers > 1 && decimal.TryParse(upsellValue2, out decimal parsedValue2))
+                                    {
+                                        upsellsumInsuredList[1] = parsedValue2;
+                                    }
+                                    if (noOfMembers > 2 && decimal.TryParse(upsellValue3, out decimal parsedValue3))
+                                    {
+                                        upsellsumInsuredList[2] = parsedValue3;
+                                    }
+                                    if (noOfMembers > 3 && decimal.TryParse(upsellValue4, out decimal parsedValue4))
+                                    {
+                                        upsellsumInsuredList[3] = parsedValue4;
+                                    }
+                                    if (noOfMembers > 4 && decimal.TryParse(upsellValue5, out decimal parsedValue5))
+                                    {
+                                        upsellsumInsuredList[4] = parsedValue5;
+                                    }
+                                    if (noOfMembers > 5 && decimal.TryParse(upsellValue5, out decimal parsedValue6)) // Assuming same value for siSix
+                                    {
+                                        upsellsumInsuredList[5] = parsedValue6;
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    decimal? totalupsellsuminsured = upsellsumInsuredList.Sum(si => si ?? 0);
+                    string searchOnlineDescText = "ONLINE_DISCOUNT";
+                    bool containsOnlineDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchOnlineDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchOnlineDescText = containsOnlineDescText ? 1 : 0;
+
+                    string searchDeductibleDescText = "DEDUCTIBLE_DISCOUNT";
+                    bool containsdeuctibleDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchDeductibleDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchdeuctibleDescText = containsdeuctibleDescText ? 1 : 0;
+
+                    string searcFamilyDescText = "FAMILY_DISCOUNT";
+                    bool containsFamilyDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searcFamilyDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchFamilyDescText = containsFamilyDescText ? 1 : 0;
+
+                    string searchEmployeeDescText = "EMPLOYEE_DISCOUNT";
+                    bool containsEmployeeDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchEmployeeDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultSearchEmployeeDescText = containsEmployeeDescText ? 1 : 0;
+
+                    string searchLoyaltyDescText = "LOYALTY_DISCOUNT";
+                    bool containsLoyaltyDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchLoyaltyDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultLoyaltyDescText = containsLoyaltyDescText ? 1 : 0;
+
+                    string searchCombiDescText = "COMBI_DISCOUNT";
+                    bool containsCombiDescText = policyLdDescValues.Any(desc => desc != null && desc.Contains(searchCombiDescText, StringComparison.OrdinalIgnoreCase));
+                    decimal? resultCombiDescText = containsCombiDescText ? 1 : 0;
+
+                    decimal? deductablesInsured1 = row.insured_deductable1;//c99
+                    decimal? loyaltyDiscount = resultLoyaltyDescText;// row.loyalty_discount;//c798
+                    decimal? employeeDiscount = resultSearchEmployeeDescText;//c799
+                    decimal? onlineDiscount = resultSearchOnlineDescText;//c800
+
+
+                    decimal? combiDiscounts = resultCombiDescText;//C803
+                    var policyType = row.policy_type;
+
+                    var policyperiod = row.policy_period;//c14
+
+                    List<string> insuredRelations = new List<string>();
+
+                    // Loop through the relation fields (1 to 12) and add them to the list
+                    for (int i = 1; i <= 12; i++)
+                    {
+                        // Dynamically access the properties and add them to the list
+                        var insuredRelation = row.GetType().GetProperty($"txt_insured_relation{i}")?.GetValue(row)?.ToString();
+                        insuredRelations.Add(insuredRelation);
+                    }
+
+
+                    List<decimal?> cumulativeBonusList = new List<decimal?>();
+
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        decimal? bonusValue = Convert.ToDecimal(row.GetType().GetProperty($"insured_cb{i}")?.GetValue(row));
+                        cumulativeBonusList.Add(bonusValue);
+                    }
+
+                    decimal? cumulativeBonus = cumulativeBonusList.Sum(cb => cb ?? 0);
+                    var c15 = row.tier_type;       //c15
+                    var c16 = row.policyplan;//c16
+
+                    List<decimal> basicLoadingRates = new List<decimal>();
+
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        decimal? loadingRate = (decimal?)iDSTData.GetType().GetProperty($"loading_per_insured{i}")?.GetValue(iDSTData);
+
+                        basicLoadingRates.Add(loadingRate ?? 0);
+                    }
+
+                    var deductibleDiscountVal = deductableDiscount
+                             .Where(roww =>
+                                 roww.Value is Hashtable rateDetails &&
+                                 rateDetails["si"] != null && Convert.ToDecimal(rateDetails["si"]) == upsellsumInsuredList[0] &&
+                                 rateDetails["deductible"] != null && Convert.ToDecimal(rateDetails["deductible"]) == deductablesInsured1
+                             )
+                             .Select(roww =>
+                                 roww.Value is Hashtable details && details["discount"] != null
+                                 ? Convert.ToDecimal(details["discount"])
+                                 : (decimal?)null
+                             )
+                             .FirstOrDefault();
+                    decimal? deductibleDiscount = deductibleDiscountVal ?? 0;
+                    decimal? loyaltyDiscountValue = loyaltyDiscount;
+                    loyaltyDiscountValue = loyaltyDiscount.HasValue && loyaltyDiscount.Value > 0 ? 2.5m : 0.0m;
+
+                    // Get the value from the 799th column (index 799)
+                    decimal? employeeDiscountValue = employeeDiscount;
+                    employeeDiscountValue = employeeDiscount.HasValue && employeeDiscount.Value > 0 ? 5.0m : 0.0m;
+
+                    decimal? onlineDiscountValue = onlineDiscount;
+                    onlineDiscountValue = onlineDiscount.HasValue && onlineDiscount.Value > 0 ? 5.0m : 0.0m;
+
+                    // Calculate the discount based on the policy type and number of members
+                    decimal? familyDiscountValue = CalculateFamilyDiscount(policyType, numberOfMembers);
+                    decimal? combiDiscountValue = CalculateCombiDiscount(combiDiscounts);
+
+                    //// Calculate the percentage based on the policy period
+                    decimal tenureDiscount = GetPolicyPercentage(policyperiod);
+                    var columnName = GetColumnNameForPolicyPeriod(policyperiod);
+                    if (columnName == null)
+                    {
+                        throw new ArgumentException($"Invalid policy period: {policyperiod}");
+                    }
+                    // Construct the raw SQL query
+                    var sql = $@"
+ SELECT {columnName}
+ FROM baserate
+ WHERE si = @p0 AND age = @p1 AND tier = @p2 AND product = @p3";
+                    List<decimal?> basePremiumsList = new List<decimal?>();
+                    decimal? basePrem = 0;
+
+                    for (int i = 0; i < noOfMembers; i++)
+                    {
+                        basePrem = baseRateHashTable
+                            .Where(row =>
+                                row.Value is Hashtable rateDetails &&
+                                (int)rateDetails["si"] == upsellsumInsuredList[i] &&  // Using sumInsuredList[i]
+                                (int)rateDetails["age"] == insuredAges[i] &&
+                                rateDetails["tier"].ToString() == c15 &&
+                                rateDetails["product"].ToString() == c16)
+                            .Select(row =>
+                                row.Value is Hashtable details &&
+                                details[columnName] != null
+                                    ? Convert.ToDecimal(details[columnName])
+                                    : (decimal?)null)
+                            .FirstOrDefault();
+
+                        basePremiumsList.Add(basePrem);
+                    }
+                    string condition = policyType; // Change to "INDIVIDUAL" to test the other case
+
+                    decimal? basePremium = CalculateResult(condition, basePremiumsList);
+                    deductibleDiscount = deductibleDiscount / 100;
+                    var resultPremium = basePremium * deductibleDiscount;
+                    decimal? basePremiumAfterDeductible = basePremium - resultPremium;
+
+
+                    List<decimal?> loadingPremList = new List<decimal?>();
+                    for (int i = 0; i < noOfMembers; i++)
+                    {
+                        decimal? basePre = basePremiumsList[i];
+                        decimal? loadingRate = basicLoadingRates[i];
+                        decimal? loadingPremm = CalculateLoadingPrem(basePre, loadingRate / 100);
+                        loadingPremList.Add(loadingPremm);
+                    }
+                    decimal? loadingPrem = loadingPremList.Sum();
+
+                    decimal? BaseAndLoading = basePremiumAfterDeductible + loadingPrem;
+                    decimal? BaseAndLoadingLoyaltyDiscount = loyaltyDiscountValue / 100 * BaseAndLoading;
+                    decimal? BaseAndLoadingEmployeeDiscount = employeeDiscountValue / 100 * BaseAndLoading;
+                    decimal? BaseAndLoadingOnlineDiscount = (onlineDiscountValue / 100) * BaseAndLoading;
+                    decimal? BaseAndLoadingFamilyDiscount = familyDiscountValue * BaseAndLoading;
+
+                    decimal?[] cappedDiscountValues = new decimal?[]
+                      {
+             BaseAndLoadingLoyaltyDiscount, // Value from cell C158
+             BaseAndLoadingEmployeeDiscount, // Value from cell C159
+             BaseAndLoadingOnlineDiscount, // Value from cell C160
+             BaseAndLoadingFamilyDiscount  // Value from cell C161
+                      };
+
+                    decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
+                    decimal? combiDiscount = (BaseAndLoading - cappedDiscount) * combiDiscountValue;
+                    decimal? longTermDiscount = CalculatelongTermDiscount(BaseAndLoading, cappedDiscount, combiDiscount, tenureDiscount);
+                    decimal? oSBasePremium = BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount;
+                    oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null;
+
+
+                    decimal? unlimitedRestoreValue = 0;
+                    if (siRiderThreeDataTable.Rows.Count >= 1)
+                    {
+                        foreach (DataRow itemRow in siRiderThreeDataTable.Rows)
+
+                            unlimitedRestoreValue = 1;
+                    }
+
+                    // Apply the conditional logic
+                    decimal? unlimitedRestore = unlimitedRestoreValue > 0 ? oSBasePremium * 0.005m : 0;//calculation required
+                    decimal? finalBasePremium = oSBasePremium + unlimitedRestore;
+                    decimal? SI = 0;
+                    string Opt = "N";
+                    if (siRiderOneDataTable.Rows.Count >= 1)
+                    {
+                        foreach (DataRow itemRow in siRiderOneDataTable.Rows)
+                        {
+                            Opt = "Y";
+                            object siValueObject = itemRow["SIValue"];
+                            SI = Convert.ToDecimal(siValueObject);
+                        }
+                    }
+                    //var CIVariant1 = string.IsNullOrEmpty(iDSTData.insured1_information2_1) == null ? "9" : iDSTData.insured1_information2_1;
+                    //var CIVariant2 = string.IsNullOrEmpty(iDSTData.insured1_information2_2) == null ? "9" : iDSTData.insured1_information2_2;
+                    //var CIVariant3 = string.IsNullOrEmpty(iDSTData.insured1_information2_3) == null ? "9" : iDSTData.insured1_information2_3;
+                    //var CIVariant4 = string.IsNullOrEmpty(iDSTData.insured1_information2_4) == null ? "9" : iDSTData.insured1_information2_4;
+                    //var CIVariant5 = string.IsNullOrEmpty(iDSTData.insured1_information2_5) == null ? "9" : iDSTData.insured1_information2_5;
+                    //var CIVariant6 = string.IsNullOrEmpty(iDSTData.insured1_information2_6) == null ? "9" : iDSTData.insured1_information2_6;
+                    //var CIVariant7 = string.IsNullOrEmpty(iDSTData.insured1_information2_7) == null ? "9" : iDSTData.insured1_information2_7;
+                    //var CIVariant8 = string.IsNullOrEmpty(iDSTData.insured1_information2_8) == null ? "9" : iDSTData.insured1_information2_8;
+                    //var CIVariant9 = string.IsNullOrEmpty(iDSTData.insured1_information2_9) == null ? "9" : iDSTData.insured1_information2_9;
+                    //var CIVariant10 = string.IsNullOrEmpty(iDSTData.insured1_information2_10) == null? "9" : iDSTData.insured1_information2_10;
+                    //var CIVariant11 = string.IsNullOrEmpty(iDSTData.insured1_information2_11) == null ? "9" : iDSTData.insured1_information2_11;
+                    //var CIVariant12 = string.IsNullOrEmpty(iDSTData.insured1_information2_12) == null ? "9" : iDSTData.insured1_information2_12;
+                    List<decimal> ciVariants = new List<decimal>();
+                    for (int i = 1; i <= noOfMembers; i++)
+                    {
+                        decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
+
+                        ciVariants.Add(ciVariant ?? 9);
+                    }
+                    // decimal? CIVariant = SI != 0 ? 9 : 0;
+                    var policyPeriod = GetColumnNameForPolicyPeriod(policyperiod);
+                    if (policyPeriod == null)
+                    {
+                        throw new ArgumentException($"Invalid policy period: {policyperiod}");
+                    }
+                    var sqlpolicyPeriod = $@"
+ SELECT {policyPeriod}
+ FROM cirates
+ WHERE age = @p0 AND ci_variant = @p1";
+                    List<decimal?> ciRates = new List<decimal?>();
+                    for (int i = 0; i < insuredAges.Count; i++)
+                    {
+                        if (insuredAges[i].HasValue)  // Check if the age is valid
+                        {
+                            decimal? ciRate = await GetCIRate(insuredAges[i].Value, ciVariants[i], policyPeriod, sqlpolicyPeriod, cirates);
+                            ciRates.Add(ciRate);  // Add the resulting CI rate to the list
+                        }
+                        else
+                        {
+                            ciRates.Add(null);  // If the age is invalid, add a null CI rate
+                        }
+                    }
+                    List<decimal?> premiums = new List<decimal?>();
+                    foreach (var ciRate in ciRates)
+                    {
+                        decimal? processedCiRate = GetCiRatesValues(SI, ciRate);  // Process the CI rate using the existing method
+                        premiums.Add(processedCiRate);  // Add the processed rate to the list
+                    }
+                    decimal? premium = premiums.Sum();
+                    List<decimal?> loadingPremiumvalues = new List<decimal?>();
+                    for (int i = 1; i < noOfMembers; i++)
+                    {
+                        decimal? premiumm = premiums[i]; // Fetch the premium for the current member
+                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+                        decimal? loadingPremm = CalculateResultMyBaseLoading(premium, basicLoadingRate);
+
+                        // Store the result in the list
+                        loadingPremiumvalues.Add(loadingPrem);
+                    }
+                    decimal? loadingPremium = loadingPremiumvalues.Sum();
+                    decimal? cIloyaltyDiscountValue;
+                    decimal? cIloyaltyDiscount;
+                    GetLoyaltyDiscount(loyaltyDiscountValue, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
+                    //GetLoyaltyDiscount(loyaltyDiscount, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
+                    // Get the value from the 799th column (index 799)
+                    decimal? cIemployeeDiscountValue = employeeDiscount;
+                    decimal? cIonlineDiscountValue = onlineDiscount;
+                    decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
+
+                    decimal? cIBaseAndLoading = premium + loadingPremium;
+                    decimal? cIBaseLoyaltyDisocunt = cIloyaltyDiscount * cIBaseAndLoading;
+                    decimal? cIBaseEmployeeDisocunt = employeeDiscountValue / 100 * cIBaseAndLoading;
+                    decimal? cIBaseOnlineDisocunt = onlineDiscountValue / 100 * cIBaseAndLoading;
+                    decimal? cIBaseFamilyDisocunt = cIBaseAndLoading * cIFamilyDiscountValue;
+                    decimal?[] cIcappedDiscountValues = new decimal?[]
+                    {
+             cIBaseLoyaltyDisocunt, // Value from cell C158
+             cIBaseEmployeeDisocunt, // Value from cell C159
+             cIBaseOnlineDisocunt, // Value from cell C160
+             cIBaseFamilyDisocunt  // Value from cell C161
+                    };
+                    decimal? cicappedDiscount = CalculateCappedDiscount(cappedDiscountValues, cIBaseAndLoading);
+                    decimal?[] cicappedDiscountValues = new decimal?[]
+                      {
+             cIBaseLoyaltyDisocunt, // Value from cell C158
+             cIBaseEmployeeDisocunt, // Value from cell C159
+             cIBaseOnlineDisocunt, // Value from cell C160
+             cIBaseFamilyDisocunt  // Value from cell C161
+                      };
+                    decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
+                    decimal? CIBaselongTermDiscount = (cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount;
+
+                    decimal? cIBaseBaseCoverPremium = cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount;
+
+                    string cashBenefitOpt = "N";
+                    decimal? hdcsi = 0;
+                    if (siRiderTwoDataTable.Rows.Count >= 1)
+                    {
+                        foreach (DataRow itemRow in siRiderTwoDataTable.Rows)
+                        {
+                            cashBenefitOpt = "Y";
+                            object hdcsiValueObject = itemRow["SIValue"];
+                            hdcsi = Convert.ToDecimal(hdcsiValueObject);
+                        }
+                    }
+
+                    var insuredRelationTAGValues = new List<string?>();
+                    for (int i = 0; i < insuredRelations.Count; i++)
+                    {
+                        var insuredRelation = insuredRelations[i];
+                        var insuredRelationTAG = relations
+                            .Where(roww =>
+                                roww.Value is Hashtable rateDetails &&
+                                rateDetails["insured_relation"]?.ToString() == insuredRelation)
+                            .Select(roww =>
+                                roww.Value is Hashtable details && details["relation_tag"] != null
+                                ? Convert.ToString(details["relation_tag"])
+                                : (string?)null)
+                            .FirstOrDefault();
+
+                        insuredRelationTAGValues.Add(insuredRelationTAG);
+                    }
+                    // Perform the count and apply the logic
+                    string aValue = ProcessCountForA(insuredRelationTAGValues);
+                    string pValue = ProcessCountForP(insuredRelationTAGValues);
+                    string cValue = ProcessCountForC(insuredRelationTAGValues);
+                    string A = aValue;
+
+                    var hdcAgeBand = hdcrates
+                       .Where(roww =>
+                           roww.Value is Hashtable rateDetails &&
+                           rateDetails.ContainsKey("age") && rateDetails["age"] != null && (int)rateDetails["age"] == eldestMember &&
+                           rateDetails.ContainsKey("plan_type") && rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == A.ToString()
+                       )
+                       .Select(roww =>
+                           roww.Value is Hashtable details &&
+                           details.ContainsKey("age_band") && details["age_band"] != null
+                           ? details["age_band"].ToString()
+                           : null
+                       )
+                      .FirstOrDefault();
+
+                    string? P = pValue;
+                    string? C = cValue;
+                    string? familyDefn = (A ?? string.Empty) + (P ?? string.Empty) + (C ?? string.Empty);
+                    familyDefn = familyDefn.Trim();
+
+                    // Construct the raw SQL query
+                    var sqlperiod = $@"
+ SELECT {columnName}
+ FROM hdcrates
+ WHERE si = @p0 AND age = @p1 AND age_band = @p2 AND plan_type=@p3";
+
+                    // Execute the raw SQL query
+                    var cashBenefitPremiumValue = hdcrates
+                       .Where(roww =>
+                           roww.Value is Hashtable rateDetails &&
+                           rateDetails["si"] != null && (rateDetails["si"] as int? ?? 0) == hdcsi &&
+                           rateDetails["age"] != null && (rateDetails["age"] as int? ?? 0) == eldestMember &&
+                           rateDetails["age_band"] != null && rateDetails["age_band"].ToString() == hdcAgeBand &&
+                           rateDetails["plan_type"] != null && rateDetails["plan_type"].ToString() == familyDefn
+                       )
+                       .Select(roww =>
+                           roww.Value is Hashtable details && details[columnName] != null
+                           ? Convert.ToDecimal(details[columnName])
+                           : (decimal?)null
+                       )
+                       .FirstOrDefault();
+                    decimal? cashBenefitSI = hdcsi;
+
+                    string? ageBand = hdcAgeBand;
+                    cashBenefitPremiumValue = cashBenefitPremiumValue ?? 0m;
+                    decimal? cashBenefitPremium = cashBenefitPremiumValue;
+                    // Construct the raw SQL query
+
+                    var dictionary = new Dictionary<string, List<string>>
+ {
+     { "2a", GenerateColumnNames("2a") },
+      { "2c", GenerateColumnNames("2c")},
+       { "2a2p", Generate2A2PColumnNames("2a2p") },
+       { "2a2c", Generate2A2PColumnNames("2a2c") }
+ };
+
+                    var key = familyDefn.ToLower();
+                    var columnNamesString = "";
+                    if (dictionary.TryGetValue(key, out var columnValues))
+                    {
+                        // Convert the list of column names to a single string
+                        columnNamesString = string.Join(", ", columnValues);
+                        Console.WriteLine($"Key: {key}");
+                        Console.WriteLine($"Column Values: {columnNamesString}");
+                    }
+                    ////{columnNamesString},p1, c1, c2, c3, p2,eldest_member_age_band, family_composition
+                    var sqlhdcproportionsplit = $@"
+ SELECT * 
+ FROM hdcproportionsplit
+ WHERE  eldest_member_age_band = @p0 AND family_composition = @p1";
+                    //Execute the raw SQL query
+
+                    var results = hdcproportionsplit
+                             .Where(roww =>
+                             {
+                                 if (roww.Value is Hashtable rateDetails)
+                                 {
+                                     // Check that "eldest_member_age_band" exists and is not null
+                                     var eldestMemberAgeBand = rateDetails["eldest_member_age_band"];
+                                     var deductible = rateDetails["family_composition"];
+
+                                     return eldestMemberAgeBand != null &&
+                                            eldestMemberAgeBand.ToString() == hdcAgeBand && // Correct comparison for "eldest_member_age_band"
+                                            deductible != null &&
+                                            deductible.ToString() == familyDefn; // Correct comparison for "deductible"
+                                 }
+                                 return false;
+                             })
+                         .Select(roww =>
+                         {
+                             if (roww.Value is Hashtable details)
+                             {
+                                 // Only return a result if the necessary keys exist
+                                 return new
+                                 {
+                                     eldest_member_age_band = details["eldest_member_age_band"]?.ToString(), // Use null-conditional operator
+                                     family_composition = details["family_composition"]?.ToString(),
+                                     a1 = details["a1"]?.ToString(),
+                                     a2 = details["a2"]?.ToString(),
+                                     p1 = details["p1"]?.ToString(),
+                                     p2 = details["p2"]?.ToString(),
+                                     c1 = details["c1"]?.ToString(),
+                                     c2 = details["c2"]?.ToString()
+                                 };
+                             }
+                             return null; // Return null if `details` is not a Hashtable
+                         })
+                         .Where(details => details != null) // Filter out null results
+                         .ToList(); // Get the results as a list
+                    var selectedValues = results.Select(r => new
+                    {
+                        a1 = Convert.ToDecimal(r.a1),
+                        a2 = Convert.ToDecimal(r.a2),
+                        p1 = Convert.ToDecimal(r.p1),
+                        p2 = Convert.ToDecimal(r.p2),
+                        c1 = Convert.ToDecimal(r.c1),
+                        c2 = Convert.ToDecimal(r.c2)
+                    }).FirstOrDefault();
+
+
+                    decimal? Insured_1 = selectedValues?.a1 * cashBenefitPremiumValue;
+                    decimal? Insured_2 = selectedValues?.a2 * cashBenefitPremiumValue;
+                    decimal? Insured_3 = 0m;
+                    decimal? Insured_4 = 0m;
+                    if (familyDefn == "2A 2P")
+                    {
+                        Insured_3 = selectedValues?.p1 * cashBenefitPremiumValue;
+                        Insured_4 = selectedValues?.p2 * cashBenefitPremiumValue;
+                    }
+                    if (familyDefn == "2A 2C")
+                    {
+                        Insured_3 = selectedValues?.c1 * cashBenefitPremiumValue;
+                        Insured_4 = (selectedValues?.c2) * cashBenefitPremiumValue;
+                    }
+
+                    decimal? Insured_5 = 0;
+                    decimal? Insured_6 = 0;
+                    decimal? Insured_7 = 0;
+                    decimal? Insured_8 = 0;
+                    decimal? Insured_9 = 0;
+                    decimal? Insured_10 = 0;
+                    decimal? Insured_11 = 0;
+                    decimal? Insured_12 = 0;
+
+
+                    List<decimal?> premiumCheckInsuredValues = new List<decimal?>();
+                    premiumCheckInsuredValues.Add(Insured_1);
+                    premiumCheckInsuredValues.Add(Insured_2);
+                    premiumCheckInsuredValues.Add(Insured_3);
+                    premiumCheckInsuredValues.Add(Insured_4);
+                    premiumCheckInsuredValues.Add(Insured_5);
+                    premiumCheckInsuredValues.Add(Insured_6);
+                    premiumCheckInsuredValues.Add(Insured_7);
+                    premiumCheckInsuredValues.Add(Insured_8);
+                    premiumCheckInsuredValues.Add(Insured_9);
+                    premiumCheckInsuredValues.Add(Insured_10);
+                    premiumCheckInsuredValues.Add(Insured_11);
+                    premiumCheckInsuredValues.Add(Insured_12);
+
+                    decimal? cashBenefitLoadingPremiumSum = premiumCheckInsuredValues.Sum();
+                    decimal? premiumCheck = cashBenefitLoadingPremiumSum - cashBenefitPremiumValue;
+
+                    // Calculate the result and handle errors              
+                    List<decimal?> cashBenefitLoadingPremiumValues = new List<decimal?>();
+                    for (int i = 0; i < noOfMembers; i++)
+                    {
+                        decimal? insuredValue = premiumCheckInsuredValues[i]; // Fetch the insured value for the current member
+                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+
+                        decimal? cashBenefit = CalculateLoadingPremium(insuredValue, basicLoadingRate / 100);
+                        cashBenefitLoadingPremiumValues.Add(cashBenefit);
+                    }
+
+                    decimal? cashBenefitLoadingPremium = cashBenefitLoadingPremiumValues.Sum();
+
+                    decimal? hDCBaseAndLoading = cashBenefitPremium + cashBenefitLoadingPremium;
+                    decimal? hDCBaseAndLoadingLoyaltyDiscount = hDCBaseAndLoading * cIloyaltyDiscount;
+                    decimal? hDCBaseAndLoadingEmployeeDiscount = hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue);
+                    onlineDiscountValue = onlineDiscountValue / 100;
+                    decimal? hDCOnlineDisocuntValue = hDCBaseAndLoading * (onlineDiscountValue);//GetOnlineDiscount(noOfMembers);
+                    decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
+                    decimal? hDCBaseAndLoadingFamilyDiscount = hDCBaseAndLoading * (familyDiscountValue);
+                    decimal?[] hDCcappedDiscountValues = new decimal?[]
+                     {
+             hDCBaseAndLoadingLoyaltyDiscount, // Value from cell C158
+             hDCBaseAndLoadingEmployeeDiscount, // Value from cell C159
+             hDCBaseAndLoadingOnlineDiscount, // Value from cell C160
+             hDCBaseAndLoadingFamilyDiscount  // Value from cell C161
+                     };
+
+                    decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
+
+                    decimal? hDClongTermDiscount = (hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount;
+
+                    decimal? hDCBaseCoverPremium = hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount;
+
+                    decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium);
+
+                    decimal? GST = netPremium * 0.18m;
+
+                    decimal? finalPremium = netPremium + GST;
+
+                    decimal? selectedUpsellPremium = row.upsellpremium1 ?? row.upsellpremium2 ?? row.upsellpremium3 ?? row.upsellpremium4 ?? row.upsellpremium5 ?? 0;
+
+                    upsellCrosscheck = selectedUpsellPremium - finalPremium;
+
+                    os = new OptimaSecureRNE
+                    {
+                        prod_code = row.prod_code,
+                        prod_name = row.prod_name,
+                        policy_number = row.policy_number,
+                        batchid = row.batchid,
+                        customer_id = row.customer_id,
+                        customername = row.customername,
+                        txt_salutation = row.txt_salutation,
+                        location_code = row.location_code,
+                        txt_apartment = row.txt_apartment,
+                        txt_street = row.txt_street,
+                        txt_areavillage = row.txt_areavillage,
+                        txt_citydistrict = row.txt_citydistrict,
+                        txt_state = row.txt_state,
+                        state_code = row.state_code,
+                        state_regis = row.state_regis,
+                        txt_pincode = row.txt_pincode,
+                        txt_nationality = row.txt_nationality,
+                        txt_mobile = row.txt_mobile,
+                        txt_telephone = row.txt_telephone,
+                        txt_email = row.txt_email,
+                        txt_dealer_cd = row.txt_dealer_cd,//intermediary_code in gc mapping
+                        imdname = row.imdname,//intermediary_name in gc
+                        verticalname = row.verticalname,//psm_name in gc
+                                                        //ssm_name = row.ssm_name,
+                        txt_family = row.txt_family,
+                        isrnflag = row.isrnflag,//chk
+                        reference_num = row.reference_num,//proposal no in gc
+                        split_flag = row.split_flag,
+                        isvipflag = row.isvipflag,//chk 
+                        optima_secure_gst = /*row.GST,*/
                     row.optima_secure_gst.HasValue ? Math.Round(row.optima_secure_gst.Value, 2) : (decimal?)null,
 
-                    txt_insuredname1 = row.txt_insuredname1,
-                    txt_insuredname2 = row.txt_insuredname2,
-                    txt_insuredname3 = row.txt_insuredname3,
-                    txt_insuredname4 = row.txt_insuredname4,
-                    txt_insuredname5 = row.txt_insuredname5,
-                    txt_insuredname6 = row.txt_insuredname6,
-                    txt_insuredname7 = row.txt_insuredname7,
-                    txt_insuredname8 = row.txt_insuredname8,
-                    txt_insuredname9 = row.txt_insuredname9,
-                    txt_insuredname10 = row.txt_insuredname10,
-                    txt_insuredname11 = row.txt_insuredname11,
-                    txt_insuredname12 = row.txt_insuredname12,
+                        txt_insuredname1 = row.txt_insuredname1,
+                        txt_insuredname2 = row.txt_insuredname2,
+                        txt_insuredname3 = row.txt_insuredname3,
+                        txt_insuredname4 = row.txt_insuredname4,
+                        txt_insuredname5 = row.txt_insuredname5,
+                        txt_insuredname6 = row.txt_insuredname6,
+                        txt_insuredname7 = row.txt_insuredname7,
+                        txt_insuredname8 = row.txt_insuredname8,
+                        txt_insuredname9 = row.txt_insuredname9,
+                        txt_insuredname10 = row.txt_insuredname10,
+                        txt_insuredname11 = row.txt_insuredname11,
+                        txt_insuredname12 = row.txt_insuredname12,
 
-                    txt_insured_entrydate1 = row.txt_insured_entrydate1,//chk inceptiondate in gc
-                    txt_insured_entrydate2 = row.txt_insured_entrydate2,
-                    txt_insured_entrydate3 = row.txt_insured_entrydate3,
-                    txt_insured_entrydate4 = row.txt_insured_entrydate4,
-                    txt_insured_entrydate5 = row.txt_insured_entrydate5,
-                    txt_insured_entrydate6 = row.txt_insured_entrydate6,
-                    txt_insured_entrydate7 = row.txt_insured_entrydate7,
-                    txt_insured_entrydate8 = row.txt_insured_entrydate8,
-                    txt_insured_entrydate9 = row.txt_insured_entrydate9,
-                    txt_insured_entrydate10 = row.txt_insured_entrydate10,
-                    txt_insured_entrydate11 = row.txt_insured_entrydate11,
-                    txt_insured_entrydate12 = row.txt_insured_entrydate12,
+                        txt_insured_entrydate1 = row.txt_insured_entrydate1,//chk inceptiondate in gc
+                        txt_insured_entrydate2 = row.txt_insured_entrydate2,
+                        txt_insured_entrydate3 = row.txt_insured_entrydate3,
+                        txt_insured_entrydate4 = row.txt_insured_entrydate4,
+                        txt_insured_entrydate5 = row.txt_insured_entrydate5,
+                        txt_insured_entrydate6 = row.txt_insured_entrydate6,
+                        txt_insured_entrydate7 = row.txt_insured_entrydate7,
+                        txt_insured_entrydate8 = row.txt_insured_entrydate8,
+                        txt_insured_entrydate9 = row.txt_insured_entrydate9,
+                        txt_insured_entrydate10 = row.txt_insured_entrydate10,
+                        txt_insured_entrydate11 = row.txt_insured_entrydate11,
+                        txt_insured_entrydate12 = row.txt_insured_entrydate12,
 
-                    member_id1 = row.member_id1,
-                    member_id2 = row.member_id2,
-                    member_id3 = row.member_id3,
-                    member_id4 = row.member_id4,
-                    member_id5 = row.member_id5,
-                    member_id6 = row.member_id6,
-                    member_id7 = row.member_id7,
-                    member_id8 = row.member_id8,
-                    member_id9 = row.member_id9,
-                    member_id10 = row.member_id10,
-                    member_id11 = row.member_id11,
-                    member_id12 = row.member_id12,
+                        member_id1 = row.member_id1,
+                        member_id2 = row.member_id2,
+                        member_id3 = row.member_id3,
+                        member_id4 = row.member_id4,
+                        member_id5 = row.member_id5,
+                        member_id6 = row.member_id6,
+                        member_id7 = row.member_id7,
+                        member_id8 = row.member_id8,
+                        member_id9 = row.member_id9,
+                        member_id10 = row.member_id10,
+                        member_id11 = row.member_id11,
+                        member_id12 = row.member_id12,
 
-                    insured_loadingper1 = row.insured_loadingper1,
-                    insured_loadingper2 = row.insured_loadingper2,
-                    insured_loadingper3 = row.insured_loadingper3,
-                    insured_loadingper4 = row.insured_loadingper4,
-                    insured_loadingper5 = row.insured_loadingper5,
-                    insured_loadingper6 = row.insured_loadingper6,
-                    insured_loadingper7 = row.insured_loadingper7,
-                    insured_loadingper8 = row.insured_loadingper8,
-                    insured_loadingper9 = row.insured_loadingper9,
-                    insured_loadingper10 = row.insured_loadingper10,
-                    insured_loadingper11 = row.insured_loadingper11,
-                    insured_loadingper12 = row.insured_loadingper12,
+                        insured_loadingper1 = row.insured_loadingper1,
+                        insured_loadingper2 = row.insured_loadingper2,
+                        insured_loadingper3 = row.insured_loadingper3,
+                        insured_loadingper4 = row.insured_loadingper4,
+                        insured_loadingper5 = row.insured_loadingper5,
+                        insured_loadingper6 = row.insured_loadingper6,
+                        insured_loadingper7 = row.insured_loadingper7,
+                        insured_loadingper8 = row.insured_loadingper8,
+                        insured_loadingper9 = row.insured_loadingper9,
+                        insured_loadingper10 = row.insured_loadingper10,
+                        insured_loadingper11 = row.insured_loadingper11,
+                        insured_loadingper12 = row.insured_loadingper12,
 
-                    insured_loadingamt1 = row.insured_loadingamt1,
-                    insured_loadingamt2 = row.insured_loadingamt2,
-                    insured_loadingamt3 = row.insured_loadingamt3,
-                    insured_loadingamt4 = row.insured_loadingamt4,
-                    insured_loadingamt5 = row.insured_loadingamt5,
-                    insured_loadingamt6 = row.insured_loadingamt6,
-                    insured_loadingamt7 = row.insured_loadingamt7,
-                    insured_loadingamt8 = row.insured_loadingamt8,
-                    insured_loadingamt9 = row.insured_loadingamt9,
-                    insured_loadingamt10 = row.insured_loadingamt10,
-                    insured_loadingamt11 = row.insured_loadingamt11,
-                    insured_loadingamt12 = row.insured_loadingamt12,
+                        insured_loadingamt1 = row.insured_loadingamt1,
+                        insured_loadingamt2 = row.insured_loadingamt2,
+                        insured_loadingamt3 = row.insured_loadingamt3,
+                        insured_loadingamt4 = row.insured_loadingamt4,
+                        insured_loadingamt5 = row.insured_loadingamt5,
+                        insured_loadingamt6 = row.insured_loadingamt6,
+                        insured_loadingamt7 = row.insured_loadingamt7,
+                        insured_loadingamt8 = row.insured_loadingamt8,
+                        insured_loadingamt9 = row.insured_loadingamt9,
+                        insured_loadingamt10 = row.insured_loadingamt10,
+                        insured_loadingamt11 = row.insured_loadingamt11,
+                        insured_loadingamt12 = row.insured_loadingamt12,
 
-                    txt_insured_dob1 = row.txt_insured_dob1,
-                    txt_insured_dob2 = row.txt_insured_dob2,
-                    txt_insured_dob3 = row.txt_insured_dob3,
-                    txt_insured_dob4 = row.txt_insured_dob4,
-                    txt_insured_dob5 = row.txt_insured_dob5,
-                    txt_insured_dob6 = row.txt_insured_dob6,
-                    txt_insured_dob7 = row.txt_insured_dob7,
-                    txt_insured_dob8 = row.txt_insured_dob8,
-                    txt_insured_dob9 = row.txt_insured_dob9,
-                    txt_insured_dob10 = row.txt_insured_dob10,
-                    txt_insured_dob11 = row.txt_insured_dob11,
-                    txt_insured_dob12 = row.txt_insured_dob12,
-
-
-                    txt_insured_age1 = row.txt_insured_age1,
-                    txt_insured_age2 = row.txt_insured_age2,
-                    txt_insured_age3 = row.txt_insured_age3,
-                    txt_insured_age4 = row.txt_insured_age4,
-                    txt_insured_age5 = row.txt_insured_age5,
-                    txt_insured_age6 = row.txt_insured_age6,
-                    txt_insured_age7 = row.txt_insured_age7,
-                    txt_insured_age8 = row.txt_insured_age8,
-                    txt_insured_age9 = row.txt_insured_age9,
-                    txt_insured_age10 = row.txt_insured_age10,
-                    txt_insured_age11 = row.txt_insured_age11,
-                    txt_insured_age12 = row.txt_insured_age12,
-
-                    txt_insured_relation1 = row.txt_insured_relation1,//coming as "string"
-                    txt_insured_relation2 = row.txt_insured_relation2,
-                    txt_insured_relation3 = row.txt_insured_relation3,
-                    txt_insured_relation4 = row.txt_insured_relation4,
-                    txt_insured_relation5 = row.txt_insured_relation5,
-                    txt_insured_relation6 = row.txt_insured_relation6,
-                    txt_insured_relation7 = row.txt_insured_relation7,
-                    txt_insured_relation8 = row.txt_insured_relation8,
-                    txt_insured_relation9 = row.txt_insured_relation9,
-                    txt_insured_relation10 = row.txt_insured_relation10,
-                    txt_insured_relation11 = row.txt_insured_relation11,
-                    txt_insured_relation12 = row.txt_insured_relation12,
+                        txt_insured_dob1 = row.txt_insured_dob1,
+                        txt_insured_dob2 = row.txt_insured_dob2,
+                        txt_insured_dob3 = row.txt_insured_dob3,
+                        txt_insured_dob4 = row.txt_insured_dob4,
+                        txt_insured_dob5 = row.txt_insured_dob5,
+                        txt_insured_dob6 = row.txt_insured_dob6,
+                        txt_insured_dob7 = row.txt_insured_dob7,
+                        txt_insured_dob8 = row.txt_insured_dob8,
+                        txt_insured_dob9 = row.txt_insured_dob9,
+                        txt_insured_dob10 = row.txt_insured_dob10,
+                        txt_insured_dob11 = row.txt_insured_dob11,
+                        txt_insured_dob12 = row.txt_insured_dob12,
 
 
-                    insured_relation_tag_1 = row.insured_relation_tag_1,
-                    insured_relation_tag_2 = row.insured_relation_tag_2,
-                    insured_relation_tag_3 = row.insured_relation_tag_3,
-                    insured_relation_tag_4 = row.insured_relation_tag_4,
-                    insured_relation_tag_5 = row.insured_relation_tag_5,
-                    insured_relation_tag_6 = row.insured_relation_tag_6,
-                    insured_relation_tag_7 = row.insured_relation_tag_7,
-                    insured_relation_tag_8 = row.insured_relation_tag_8,
-                    insured_relation_tag_9 = row.insured_relation_tag_9,
-                    insured_relation_tag_10 = row.insured_relation_tag_10,
-                    insured_relation_tag_11 = row.insured_relation_tag_11,
-                    insured_relation_tag_12 = row.insured_relation_tag_12,
+                        txt_insured_age1 = row.txt_insured_age1,
+                        txt_insured_age2 = row.txt_insured_age2,
+                        txt_insured_age3 = row.txt_insured_age3,
+                        txt_insured_age4 = row.txt_insured_age4,
+                        txt_insured_age5 = row.txt_insured_age5,
+                        txt_insured_age6 = row.txt_insured_age6,
+                        txt_insured_age7 = row.txt_insured_age7,
+                        txt_insured_age8 = row.txt_insured_age8,
+                        txt_insured_age9 = row.txt_insured_age9,
+                        txt_insured_age10 = row.txt_insured_age10,
+                        txt_insured_age11 = row.txt_insured_age11,
+                        txt_insured_age12 = row.txt_insured_age12,
 
-                    pre_existing_disease1 = row.pre_existing_disease1,
-                    pre_existing_disease2 = row.pre_existing_disease2,
-                    pre_existing_disease3 = row.pre_existing_disease3,
-                    pre_existing_disease4 = row.pre_existing_disease4,
-                    pre_existing_disease5 = row.pre_existing_disease5,
-                    pre_existing_disease6 = row.pre_existing_disease6,
-                    pre_existing_disease7 = row.pre_existing_disease7,
-                    pre_existing_disease8 = row.pre_existing_disease8,
-                    pre_existing_disease9 = row.pre_existing_disease9,
-                    pre_existing_disease10 = row.pre_existing_disease10,
-                    pre_existing_disease11 = row.pre_existing_disease11,
-                    pre_existing_disease12 = row.pre_existing_disease12,
-
-
-                    insured_cb1 = row.insured_cb1,
-                    insured_cb2 = row.insured_cb2,
-                    insured_cb3 = row.insured_cb3,
-                    insured_cb4 = row.insured_cb4,
-                    insured_cb5 = row.insured_cb5,
-                    insured_cb6 = row.insured_cb6,
-                    insured_cb7 = row.insured_cb7,
-                    insured_cb8 = row.insured_cb8,
-                    insured_cb9 = row.insured_cb9,
-                    insured_cb10 = row.insured_cb10,
-                    insured_cb11 = row.insured_cb11,
-                    insured_cb12 = row.insured_cb12,
-
-                    sumInsuredList=  sumInsuredList,
-
-                    insured_deductable1 = row.insured_deductable1,
-                    insured_deductable2 = row.insured_deductable2,
-                    insured_deductable3 = row.insured_deductable3,
-                    insured_deductable4 = row.insured_deductable4,
-                    insured_deductable5 = row.insured_deductable5,
-                    insured_deductable6 = row.insured_deductable6,
-                    insured_deductable7 = row.insured_deductable7,
-                    insured_deductable8 = row.insured_deductable8,
-                    insured_deductable9 = row.insured_deductable9,
-                    insured_deductable10 = row.insured_deductable10,
-                    insured_deductable11 = row.insured_deductable11,
-                    insured_deductable12 = row.insured_deductable12,
+                        txt_insured_relation1 = row.txt_insured_relation1,//coming as "string"
+                        txt_insured_relation2 = row.txt_insured_relation2,
+                        txt_insured_relation3 = row.txt_insured_relation3,
+                        txt_insured_relation4 = row.txt_insured_relation4,
+                        txt_insured_relation5 = row.txt_insured_relation5,
+                        txt_insured_relation6 = row.txt_insured_relation6,
+                        txt_insured_relation7 = row.txt_insured_relation7,
+                        txt_insured_relation8 = row.txt_insured_relation8,
+                        txt_insured_relation9 = row.txt_insured_relation9,
+                        txt_insured_relation10 = row.txt_insured_relation10,
+                        txt_insured_relation11 = row.txt_insured_relation11,
+                        txt_insured_relation12 = row.txt_insured_relation12,
 
 
-                    wellness_discount1 = row.wellness_discount1,
-                    wellness_discount2 = row.wellness_discount2,
-                    wellness_discount3 = row.wellness_discount3,
-                    wellness_discount4 = row.wellness_discount4,
-                    wellness_discount5 = row.wellness_discount5,
-                    wellness_discount6 = row.wellness_discount6,
-                    wellness_discount7 = row.wellness_discount7,
-                    wellness_discount8 = row.wellness_discount8,
-                    wellness_discount9 = row.wellness_discount9,
-                    wellness_discount10 = row.wellness_discount10,
-                    wellness_discount11 = row.wellness_discount11,
-                    wellness_discount12 = row.wellness_discount12,
+                        insured_relation_tag_1 = row.insured_relation_tag_1,
+                        insured_relation_tag_2 = row.insured_relation_tag_2,
+                        insured_relation_tag_3 = row.insured_relation_tag_3,
+                        insured_relation_tag_4 = row.insured_relation_tag_4,
+                        insured_relation_tag_5 = row.insured_relation_tag_5,
+                        insured_relation_tag_6 = row.insured_relation_tag_6,
+                        insured_relation_tag_7 = row.insured_relation_tag_7,
+                        insured_relation_tag_8 = row.insured_relation_tag_8,
+                        insured_relation_tag_9 = row.insured_relation_tag_9,
+                        insured_relation_tag_10 = row.insured_relation_tag_10,
+                        insured_relation_tag_11 = row.insured_relation_tag_11,
+                        insured_relation_tag_12 = row.insured_relation_tag_12,
+
+                        pre_existing_disease1 = row.pre_existing_disease1,
+                        pre_existing_disease2 = row.pre_existing_disease2,
+                        pre_existing_disease3 = row.pre_existing_disease3,
+                        pre_existing_disease4 = row.pre_existing_disease4,
+                        pre_existing_disease5 = row.pre_existing_disease5,
+                        pre_existing_disease6 = row.pre_existing_disease6,
+                        pre_existing_disease7 = row.pre_existing_disease7,
+                        pre_existing_disease8 = row.pre_existing_disease8,
+                        pre_existing_disease9 = row.pre_existing_disease9,
+                        pre_existing_disease10 = row.pre_existing_disease10,
+                        pre_existing_disease11 = row.pre_existing_disease11,
+                        pre_existing_disease12 = row.pre_existing_disease12,
 
 
-                    stayactive1 = row.stayactive1,
-                    stayactive2 = row.stayactive2,
-                    stayactive3 = row.stayactive3,
-                    stayactive4 = row.stayactive4,
-                    stayactive5 = row.stayactive5,
-                    stayactive6 = row.stayactive6,
-                    stayactive7 = row.stayactive7,
-                    stayactive8 = row.stayactive8,
-                    stayactive9 = row.stayactive9,
-                    stayactive10 = row.stayactive10,
-                    stayactive11 = row.stayactive11,
-                    stayactive12 = row.stayactive12,
+                        insured_cb1 = row.insured_cb1,
+                        insured_cb2 = row.insured_cb2,
+                        insured_cb3 = row.insured_cb3,
+                        insured_cb4 = row.insured_cb4,
+                        insured_cb5 = row.insured_cb5,
+                        insured_cb6 = row.insured_cb6,
+                        insured_cb7 = row.insured_cb7,
+                        insured_cb8 = row.insured_cb8,
+                        insured_cb9 = row.insured_cb9,
+                        insured_cb10 = row.insured_cb10,
+                        insured_cb11 = row.insured_cb11,
+                        insured_cb12 = row.insured_cb12,
 
-                    coverbaseloadingrate1 = row.coverbaseloadingrate1,
-                    coverbaseloadingrate2 = row.coverbaseloadingrate2,
-                    coverbaseloadingrate3 = row.coverbaseloadingrate3,
-                    coverbaseloadingrate4 = row.coverbaseloadingrate4,
-                    coverbaseloadingrate5 = row.coverbaseloadingrate5,
-                    coverbaseloadingrate6 = row.coverbaseloadingrate6,
-                    coverbaseloadingrate7 = row.coverbaseloadingrate7,
-                    coverbaseloadingrate8 = row.coverbaseloadingrate8,
-                    coverbaseloadingrate9 = row.coverbaseloadingrate9,
-                    coverbaseloadingrate10 = row.coverbaseloadingrate10,
-                    coverbaseloadingrate11 = row.coverbaseloadingrate11,
-                    coverbaseloadingrate12 = row.coverbaseloadingrate12,
+                        basesumInsuredList = basesumInsuredList,
+                        upsellsumInsuredList = upsellsumInsuredList,
 
-                    health_incentive1 = row.health_incentive1,
-                    health_incentive2 = row.health_incentive2,
-                    health_incentive3 = row.health_incentive3,
-                    health_incentive4 = row.health_incentive4,
-                    health_incentive5 = row.health_incentive5,
-                    health_incentive6 = row.health_incentive6,
-                    health_incentive7 = row.health_incentive7,
-                    health_incentive8 = row.health_incentive8,
-                    health_incentive9 = row.health_incentive9,
-                    health_incentive10 = row.health_incentive10,
-                    health_incentive11 = row.health_incentive11,
-                    health_incentive12 = row.health_incentive12,
-
-                    fitness_discount1 = row.fitness_discount1,
-                    fitness_discount2 = row.fitness_discount2,
-                    fitness_discount3 = row.fitness_discount3,
-                    fitness_discount4 = row.fitness_discount4,
-                    fitness_discount5 = row.fitness_discount5,
-                    fitness_discount6 = row.fitness_discount6,
-                    fitness_discount7 = row.fitness_discount7,
-                    fitness_discount8 = row.fitness_discount8,
-                    fitness_discount9 = row.fitness_discount9,
-                    fitness_discount10 = row.fitness_discount10,
-                    fitness_discount11 = row.fitness_discount11,
-                    fitness_discount12 = row.fitness_discount12,
-
-                    reservbenefis1 = row.reservbenefis1,
-                    reservbenefis2 = row.reservbenefis2,
-                    reservbenefis3 = row.reservbenefis3,
-                    reservbenefis4 = row.reservbenefis4,
-                    reservbenefis5 = row.reservbenefis5,
-                    reservbenefis6 = row.reservbenefis6,
-                    reservbenefis7 = row.reservbenefis7,
-                    reservbenefis8 = row.reservbenefis8,
-                    reservbenefis9 = row.reservbenefis9,
-                    reservbenefis10 = row.reservbenefis10,
-                    reservbenefis11 = row.reservbenefis11,
-                    reservbenefis12 = row.reservbenefis12,
-
-                    insured_rb_claimamt1 = row.insured_rb_claimamt1,
-                    insured_rb_claimamt2 = row.insured_rb_claimamt2,
-                    insured_rb_claimamt3 = row.insured_rb_claimamt3,
-                    insured_rb_claimamt4 = row.insured_rb_claimamt4,
-                    insured_rb_claimamt5 = row.insured_rb_claimamt5,
-                    insured_rb_claimamt6 = row.insured_rb_claimamt6,
-                    insured_rb_claimamt7 = row.insured_rb_claimamt7,
-                    insured_rb_claimamt8 = row.insured_rb_claimamt8,
-                    insured_rb_claimamt9 = row.insured_rb_claimamt9,
-                    insured_rb_claimamt10 = row.insured_rb_claimamt10,
-                    insured_rb_claimamt11 = row.insured_rb_claimamt11,
-                    insured_rb_claimamt12 = row.insured_rb_claimamt12,
+                        insured_deductable1 = row.insured_deductable1,
+                        insured_deductable2 = row.insured_deductable2,
+                        insured_deductable3 = row.insured_deductable3,
+                        insured_deductable4 = row.insured_deductable4,
+                        insured_deductable5 = row.insured_deductable5,
+                        insured_deductable6 = row.insured_deductable6,
+                        insured_deductable7 = row.insured_deductable7,
+                        insured_deductable8 = row.insured_deductable8,
+                        insured_deductable9 = row.insured_deductable9,
+                        insured_deductable10 = row.insured_deductable10,
+                        insured_deductable11 = row.insured_deductable11,
+                        insured_deductable12 = row.insured_deductable12,
 
 
-                    preventive_hc = row.preventive_hc,
-                    policy_start_date = row.policy_start_date,
-                    policy_expiry_date = row.policy_expiry_date,
-                    policy_type = row.policy_type,
-                    policy_period = row.policy_period,
-                    policyplan = row.policyplan,
-                    claimcount = row.claimcount,
-                    num_tot_premium = row.num_tot_premium.HasValue ? Math.Round(row.num_tot_premium.Value, 2) : (decimal?)null,
-
-                    no_of_members = noOfMembers,
-                    eldest_member = eldestMember,
-
-                    tier_type = row.tier_type,
-
-                    combi_discount = (combiDiscountValue * 100),
-                    employee_discount = employeeDiscountValue,
-                    online_discount = (onlineDiscountValue * 100),//
-                    loyalty_discount = loyaltyDiscountValue,
-                    tenure_discount = (tenureDiscount * 100),
-                    loading_premium = loadingPrem,
-                    family_discount = (familyDiscountValue * 100),
-                    dedcutable_discount = deductibleDiscountVal,
-
-                    //base_premium_1 = basePremium1,//chk
-                    //base_premium_2 = basePremium2,
-                    //base_premium_3 = basePremium3,
-                    //base_premium_4 = basePremium4,
-                    //base_premium_5 = basePremium5,
-                    //base_premium_6 = basePremium6,
-                    //base_premium_7 = basePremium7,
-                    //base_premium_8 = basePremium8,
-                    //base_premium_9 = basePremium9,
-                    //base_premium_10 = basePremium10,
-                    //base_premium_11 = basePremium11,
-                    //base_premium_12 = basePremium12,
-                    base_premium = basePremium,
-                    base_premium_after_deductible = basePremiumAfterDeductible,
-
-                    //first base loading
-                    loading_premiums = loadingPremiumvalues,
-                    //loading_prem2 = loadingPrem2,
-                    //loading_prem3 = loadingPrem3,
-                    //loading_prem4 = loadingPrem4,
-                    //loading_prem5 = loadingPrem5,
-                    //loading_prem6 = loadingPrem6,
-                    //loading_prem7 = loadingPrem7,
-                    //loading_prem8 = loadingPrem8,
-                    //loading_prem9 = loadingPrem9,
-                    //loading_prem10 = loadingPrem10,
-                    //loading_prem11 = loadingPrem11,
-                    //loading_prem12 = loadingPrem12,
-                    loading_prem_total = loadingPremium,
-                   
-                    //cash_benefit_loading_prem_1 = cashBenefitInsured_1,
-                    //cash_benefit_loading_prem_2 = cashBenefitInsured_2,
-                    //cash_benefit_loading_prem_3 = cashBenefitInsured_3,
-                    //cash_benefit_loading_prem_4 = cashBenefitInsured_4,
-                    //cash_benefit_loading_prem_5 = cashBenefitInsured_5,
-                    //cash_benefit_loading_prem_6 = cashBenefitInsured_6,
-                    //cash_benefit_loading_prem_7 = cashBenefitInsured_7,
-                    //cash_benefit_loading_prem_8 = cashBenefitInsured_8,
-                    //cash_benefit_loading_prem_9 = cashBenefitInsured_9,
-                    //cash_benefit_loading_prem_10 = cashBenefitInsured_10,
-                    //cash_benefit_loading_prem_11 = cashBenefitInsured_11,
-                    //cash_benefit_loading_prem_12 = loadingPrem12,
-                    cash_benefit_loading_prem_total = cashBenefitLoadingPremium,
-
-                    baseAndLoading = BaseAndLoading,//chk all values coming 0
-                    baseAndLoading_LoyaltyDiscount = BaseAndLoadingLoyaltyDiscount,
-                    baseAndLoading_EmployeeDiscount = BaseAndLoadingEmployeeDiscount,
-                    baseAndLoading_OnlineDiscount = BaseAndLoadingOnlineDiscount,
-                    baseAndLoading_FamilyDiscount = BaseAndLoadingFamilyDiscount,
-                    baseAndLoading_CombiDiscount = combiDiscount,
-                    baseAndLoading_CapppedDiscount = cappedDiscount,
-                    baseAndLoading_LongTermDiscount = longTermDiscount,
-                    //baseAndLoading_OS_Base_Premium = oSBasePremium,
-                    baseAndLoading_OS_Base_Premium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null,
-
-                    baseAndLoading_Unlimited_Restore = unlimitedRestore,
-                    baseAndLoading_Final_Base_Premium = finalBasePremium,
-
-                    //cash benefit loading
-                    //loading_prem_1 = loadingPrem_1,
-                    //loading_prem_2 = loadingPrem_2,
-                    //loading_prem_3 = loadingPrem_3,
-                    //loading_prem_4 = loadingPrem_4,
-                    //loading_prem_5 = loadingPrem_5,
-                    //loading_prem_6 = loadingPrem_6,
-                    //loading_prem_7 = loadingPrem_7,
-                    //loading_prem_8 = loadingPrem_8,
-                    //loading_prem_9 = loadingPrem_9,
-                    //loading_prem_10 = loadingPrem_10,
-                    //loading_prem_11 = loadingPrem_11,
-                    //loading_prem_12 = loadingPrem_12,
-                    loading_prem = loadingPrem,
+                        wellness_discount1 = row.wellness_discount1,
+                        wellness_discount2 = row.wellness_discount2,
+                        wellness_discount3 = row.wellness_discount3,
+                        wellness_discount4 = row.wellness_discount4,
+                        wellness_discount5 = row.wellness_discount5,
+                        wellness_discount6 = row.wellness_discount6,
+                        wellness_discount7 = row.wellness_discount7,
+                        wellness_discount8 = row.wellness_discount8,
+                        wellness_discount9 = row.wellness_discount9,
+                        wellness_discount10 = row.wellness_discount10,
+                        wellness_discount11 = row.wellness_discount11,
+                        wellness_discount12 = row.wellness_discount12,
 
 
-                    hDCBaseAndLoading = hDCBaseAndLoading,
-                    HDC_BaseCoverPremium = hDCBaseCoverPremium,
-                    HDC_LoyaltyDiscount = hDCBaseAndLoadingLoyaltyDiscount,
-                    HDC_EmployeeDiscount = hDCBaseAndLoadingEmployeeDiscount,
-                    HDC_OnlineDiscount = hDCOnlineDisocuntValue,
-                    HDC_FamilyDiscount = hDCBaseAndLoadingFamilyDiscount,
-                    HDC_CapppedDiscount = hDCCappedDiscount,
-                    HDC_LongTermDiscount = hDClongTermDiscount,
+                        stayactive1 = row.stayactive1,
+                        stayactive2 = row.stayactive2,
+                        stayactive3 = row.stayactive3,
+                        stayactive4 = row.stayactive4,
+                        stayactive5 = row.stayactive5,
+                        stayactive6 = row.stayactive6,
+                        stayactive7 = row.stayactive7,
+                        stayactive8 = row.stayactive8,
+                        stayactive9 = row.stayactive9,
+                        stayactive10 = row.stayactive10,
+                        stayactive11 = row.stayactive11,
+                        stayactive12 = row.stayactive12,
+
+                        coverbaseloadingrate1 = row.coverbaseloadingrate1,
+                        coverbaseloadingrate2 = row.coverbaseloadingrate2,
+                        coverbaseloadingrate3 = row.coverbaseloadingrate3,
+                        coverbaseloadingrate4 = row.coverbaseloadingrate4,
+                        coverbaseloadingrate5 = row.coverbaseloadingrate5,
+                        coverbaseloadingrate6 = row.coverbaseloadingrate6,
+                        coverbaseloadingrate7 = row.coverbaseloadingrate7,
+                        coverbaseloadingrate8 = row.coverbaseloadingrate8,
+                        coverbaseloadingrate9 = row.coverbaseloadingrate9,
+                        coverbaseloadingrate10 = row.coverbaseloadingrate10,
+                        coverbaseloadingrate11 = row.coverbaseloadingrate11,
+                        coverbaseloadingrate12 = row.coverbaseloadingrate12,
+
+                        health_incentive1 = row.health_incentive1,
+                        health_incentive2 = row.health_incentive2,
+                        health_incentive3 = row.health_incentive3,
+                        health_incentive4 = row.health_incentive4,
+                        health_incentive5 = row.health_incentive5,
+                        health_incentive6 = row.health_incentive6,
+                        health_incentive7 = row.health_incentive7,
+                        health_incentive8 = row.health_incentive8,
+                        health_incentive9 = row.health_incentive9,
+                        health_incentive10 = row.health_incentive10,
+                        health_incentive11 = row.health_incentive11,
+                        health_incentive12 = row.health_incentive12,
+
+                        fitness_discount1 = row.fitness_discount1,
+                        fitness_discount2 = row.fitness_discount2,
+                        fitness_discount3 = row.fitness_discount3,
+                        fitness_discount4 = row.fitness_discount4,
+                        fitness_discount5 = row.fitness_discount5,
+                        fitness_discount6 = row.fitness_discount6,
+                        fitness_discount7 = row.fitness_discount7,
+                        fitness_discount8 = row.fitness_discount8,
+                        fitness_discount9 = row.fitness_discount9,
+                        fitness_discount10 = row.fitness_discount10,
+                        fitness_discount11 = row.fitness_discount11,
+                        fitness_discount12 = row.fitness_discount12,
+
+                        reservbenefis1 = row.reservbenefis1,
+                        reservbenefis2 = row.reservbenefis2,
+                        reservbenefis3 = row.reservbenefis3,
+                        reservbenefis4 = row.reservbenefis4,
+                        reservbenefis5 = row.reservbenefis5,
+                        reservbenefis6 = row.reservbenefis6,
+                        reservbenefis7 = row.reservbenefis7,
+                        reservbenefis8 = row.reservbenefis8,
+                        reservbenefis9 = row.reservbenefis9,
+                        reservbenefis10 = row.reservbenefis10,
+                        reservbenefis11 = row.reservbenefis11,
+                        reservbenefis12 = row.reservbenefis12,
+
+                        insured_rb_claimamt1 = row.insured_rb_claimamt1,
+                        insured_rb_claimamt2 = row.insured_rb_claimamt2,
+                        insured_rb_claimamt3 = row.insured_rb_claimamt3,
+                        insured_rb_claimamt4 = row.insured_rb_claimamt4,
+                        insured_rb_claimamt5 = row.insured_rb_claimamt5,
+                        insured_rb_claimamt6 = row.insured_rb_claimamt6,
+                        insured_rb_claimamt7 = row.insured_rb_claimamt7,
+                        insured_rb_claimamt8 = row.insured_rb_claimamt8,
+                        insured_rb_claimamt9 = row.insured_rb_claimamt9,
+                        insured_rb_claimamt10 = row.insured_rb_claimamt10,
+                        insured_rb_claimamt11 = row.insured_rb_claimamt11,
+                        insured_rb_claimamt12 = row.insured_rb_claimamt12,
 
 
-                    CI_BaseAndLoading = cIBaseAndLoading,
-                    CI_BaseCoverPremium = cIBaseBaseCoverPremium,
-                    CI_LoyaltyDiscount = cIBaseLoyaltyDisocunt,
-                    CI_EmployeeDiscount = cIBaseEmployeeDisocunt,
-                    CI_OnlineDiscount = cIBaseOnlineDisocunt,
-                    CI_FamilyDiscount = cIBaseFamilyDisocunt,
-                    CI_CapppedDiscount = cIBasecappedDiscount,
-                    CI_LongTermDiscount = CIBaselongTermDiscount,
+                        preventive_hc = row.preventive_hc,
+                        policy_start_date = row.policy_start_date,
+                        policy_expiry_date = row.policy_expiry_date,
+                        policy_type = row.policy_type,
+                        policy_period = row.policy_period,
+                        policyplan = row.policyplan,
+                        claimcount = row.claimcount,
+                        num_tot_premium = row.num_tot_premium.HasValue ? Math.Round(row.num_tot_premium.Value, 2) : (decimal?)null,
 
-                    cash_Benefit_A = A,
-                    cash_Benefit_C = C,
-                    cash_Benefit_Age_Band = ageBand,
-                    cash_Benefit_SI = cashBenefitSI,
-                    cash_Benefit_Family_Defn = familyDefn,
-                    Cash_Benefit_Premium = cashBenefitPremium,
-                    cash_Benefit_insuredList=premiumCheckInsuredValues,
-                    //cash_Benefit_insured_1 = Insured_1,
-                    //cash_Benefit_insured_2 = Insured_2,
-                    //cash_Benefit_insured_3 = Insured_3,
-                    //cash_Benefit_insured_4 = Insured_4,
-                    //cash_Benefit_insured_5 = Insured_5,
-                    //cash_Benefit_insured_6 = Insured_6,
-                    //cash_Benefit_insured_7 = Insured_7,
-                    //cash_Benefit_insured_8 = Insured_8,
-                    //cash_Benefit_insured_9 = Insured_9,
-                    //cash_Benefit_insured_10 = Insured_10,
-                    //cash_Benefit_insured_11 = Insured_11,
-                    //cash_Benefit_insured_12 = Insured_12,
-                    cash_Benefit_Premium_Check = premiumCheck,
+                        no_of_members = noOfMembers,
+                        eldest_member = eldestMember,
 
-                    //loading_insured_1 = cashBenefitInsured_1,
-                    //loading_insured_2 = cashBenefitInsured_2,
-                    //loading_insured_3 = cashBenefitInsured_3,
-                    //loading_insured_4 = cashBenefitInsured_4,
-                    //loading_insured_5 = cashBenefitInsured_5,
-                    //loading_insured_6 = cashBenefitInsured_6,
-                    //loading_insured_7 = cashBenefitInsured_7,
-                    //loading_insured_8 = cashBenefitInsured_8,
-                    //loading_insured_9 = cashBenefitInsured_9,
-                    //loading_insured_10 = cashBenefitInsured_10,
-                    //loading_insured_11 = cashBenefitInsured_11,
-                    //loading_insured_12 = cashBenefitInsured_12,
+                        tier_type = row.tier_type,
 
-                    sum_insured1 = row.sum_insured1,
-                    sum_insured2 = row.sum_insured2,
-                    sum_insured3 = row.sum_insured3,
-                    sum_insured4 = row.sum_insured4,
-                    sum_insured5 = row.sum_insured5,
-                    sum_insured6 = row.sum_insured6,
-                    sum_insured7 = row.sum_insured7,
-                    sum_insured8 = row.sum_insured8,
-                    sum_insured9 = row.sum_insured9,
-                    sum_insured10 = row.sum_insured10,
-                    sum_insured11 = row.sum_insured11,
-                    sum_insured12 = row.sum_insured12,
+                        combi_discount = (combiDiscountValue * 100),
+                        employee_discount = employeeDiscountValue,
+                        online_discount = (onlineDiscountValue * 100),//
+                        loyalty_discount = loyaltyDiscountValue,
+                        tenure_discount = (tenureDiscount * 100),
+                        loading_premium = loadingPrem,
+                        family_discount = (familyDiscountValue * 100),
+                        dedcutable_discount = deductibleDiscountVal,
 
-                    critical_Illness_AddOn_Premium = premium,//chk
-                    critical_Illness_Add_On_Opt = Opt,
-                    critical_Illness_Add_On_SI = SI,
-                    //critical_Illness_Add_On_Premium1 = premium1,
-                    //critical_Illness_Add_On_Premium2 = premium2,
-                    //critical_Illness_Add_On_Premium3 = premium3,
-                    //critical_Illness_Add_On_Premium4 = premium4,
-                    //critical_Illness_Add_On_Premium5 = premium5,
-                    //critical_Illness_Add_On_Premium6 = premium6,
-                    //critical_Illness_Add_On_Premium7 = premium7,
-                    //critical_Illness_Add_On_Premium8 = premium8,
-                    //critical_Illness_Add_On_Premium9 = premium9,
-                    //critical_Illness_Add_On_Premium10 = premium10,
-                    //critical_Illness_Add_On_Premium11 = premium11,
-                    //critical_Illness_Add_On_Premium12 = premium12,
-                    critical_Illness_Add_On_PremiumList = premiums,
-                   // ci_Variant = CIVariant,
+                        //base_premium_1 = basePremium1,//chk
+                        //base_premium_2 = basePremium2,
+                        //base_premium_3 = basePremium3,
+                        //base_premium_4 = basePremium4,
+                        //base_premium_5 = basePremium5,
+                        //base_premium_6 = basePremium6,
+                        //base_premium_7 = basePremium7,
+                        //base_premium_8 = basePremium8,
+                        //base_premium_9 = basePremium9,
+                        //base_premium_10 = basePremium10,
+                        //base_premium_11 = basePremium11,
+                        //base_premium_12 = basePremium12,
+                        base_premium = basePremium,
+                        base_premium_after_deductible = basePremiumAfterDeductible,
 
-                    cash_Benefit_Opt = Opt,
+                        //first base loading
+                        loading_premiums = loadingPremiumvalues,
+                        //loading_prem2 = loadingPrem2,
+                        //loading_prem3 = loadingPrem3,
+                        //loading_prem4 = loadingPrem4,
+                        //loading_prem5 = loadingPrem5,
+                        //loading_prem6 = loadingPrem6,
+                        //loading_prem7 = loadingPrem7,
+                        //loading_prem8 = loadingPrem8,
+                        //loading_prem9 = loadingPrem9,
+                        //loading_prem10 = loadingPrem10,
+                        //loading_prem11 = loadingPrem11,
+                        //loading_prem12 = loadingPrem12,
+                        loading_prem_total = loadingPremium,
 
-                    base_Loading_And_Discount_Final_BasePremium = BaseAndLoading,
-                    base_Loading_And_Discount_Premium = finalBasePremium,
-                    net_premium = row.num_net_premium,
-                    final_Premium_upsell = finalPremium.HasValue ? Math.Round(finalPremium.Value, 2) : (decimal?)null,
+                        //cash_benefit_loading_prem_1 = cashBenefitInsured_1,
+                        //cash_benefit_loading_prem_2 = cashBenefitInsured_2,
+                        //cash_benefit_loading_prem_3 = cashBenefitInsured_3,
+                        //cash_benefit_loading_prem_4 = cashBenefitInsured_4,
+                        //cash_benefit_loading_prem_5 = cashBenefitInsured_5,
+                        //cash_benefit_loading_prem_6 = cashBenefitInsured_6,
+                        //cash_benefit_loading_prem_7 = cashBenefitInsured_7,
+                        //cash_benefit_loading_prem_8 = cashBenefitInsured_8,
+                        //cash_benefit_loading_prem_9 = cashBenefitInsured_9,
+                        //cash_benefit_loading_prem_10 = cashBenefitInsured_10,
+                        //cash_benefit_loading_prem_11 = cashBenefitInsured_11,
+                        //cash_benefit_loading_prem_12 = loadingPrem12,
+                        cash_benefit_loading_prem_total = cashBenefitLoadingPremium,
 
-                    // netPremium = netPremium,
-                    netPremium = netPremium.HasValue ? Math.Round(netPremium.Value, 2) : (decimal?)null,
+                        baseAndLoading = BaseAndLoading,//chk all values coming 0
+                        baseAndLoading_LoyaltyDiscount = BaseAndLoadingLoyaltyDiscount,
+                        baseAndLoading_EmployeeDiscount = BaseAndLoadingEmployeeDiscount,
+                        baseAndLoading_OnlineDiscount = BaseAndLoadingOnlineDiscount,
+                        baseAndLoading_FamilyDiscount = BaseAndLoadingFamilyDiscount,
+                        baseAndLoading_CombiDiscount = combiDiscount,
+                        baseAndLoading_CapppedDiscount = cappedDiscount,
+                        baseAndLoading_LongTermDiscount = longTermDiscount,
+                        //baseAndLoading_OS_Base_Premium = oSBasePremium,
+                        baseAndLoading_OS_Base_Premium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null,
 
-                    // finalPremium = finalPremium,
-                    finalPremium = finalPremium.HasValue ? Math.Round(finalPremium.Value, 2) : (decimal?)null,
+                        baseAndLoading_Unlimited_Restore = unlimitedRestore,
+                        baseAndLoading_Final_Base_Premium = finalBasePremium,
 
-                    //GST = GST,
-                    GST = GST.HasValue ? Math.Round(GST.Value, 2) : (decimal?)null,
+                        //cash benefit loading
+                        //loading_prem_1 = loadingPrem_1,
+                        //loading_prem_2 = loadingPrem_2,
+                        //loading_prem_3 = loadingPrem_3,
+                        //loading_prem_4 = loadingPrem_4,
+                        //loading_prem_5 = loadingPrem_5,
+                        //loading_prem_6 = loadingPrem_6,
+                        //loading_prem_7 = loadingPrem_7,
+                        //loading_prem_8 = loadingPrem_8,
+                        //loading_prem_9 = loadingPrem_9,
+                        //loading_prem_10 = loadingPrem_10,
+                        //loading_prem_11 = loadingPrem_11,
+                        //loading_prem_12 = loadingPrem_12,
+                        loading_prem = loadingPrem,
 
-                    //crossCheck = Crosscheck,
-                    crossCheck = crosscheck2.HasValue ? Math.Round(crosscheck2.Value, 2) : (decimal?)null,
 
-                };
+                        hDCBaseAndLoading = hDCBaseAndLoading,
+                        HDC_BaseCoverPremium = hDCBaseCoverPremium,
+                        HDC_LoyaltyDiscount = hDCBaseAndLoadingLoyaltyDiscount,
+                        HDC_EmployeeDiscount = hDCBaseAndLoadingEmployeeDiscount,
+                        HDC_OnlineDiscount = hDCOnlineDisocuntValue,
+                        HDC_FamilyDiscount = hDCBaseAndLoadingFamilyDiscount,
+                        HDC_CapppedDiscount = hDCCappedDiscount,
+                        HDC_LongTermDiscount = hDClongTermDiscount,
 
-            }
+
+                        CI_BaseAndLoading = cIBaseAndLoading,
+                        CI_BaseCoverPremium = cIBaseBaseCoverPremium,
+                        CI_LoyaltyDiscount = cIBaseLoyaltyDisocunt,
+                        CI_EmployeeDiscount = cIBaseEmployeeDisocunt,
+                        CI_OnlineDiscount = cIBaseOnlineDisocunt,
+                        CI_FamilyDiscount = cIBaseFamilyDisocunt,
+                        CI_CapppedDiscount = cIBasecappedDiscount,
+                        CI_LongTermDiscount = CIBaselongTermDiscount,
+
+                        cash_Benefit_A = A,
+                        cash_Benefit_C = C,
+                        cash_Benefit_Age_Band = ageBand,
+                        cash_Benefit_SI = cashBenefitSI,
+                        cash_Benefit_Family_Defn = familyDefn,
+                        Cash_Benefit_Premium = cashBenefitPremium,
+                        cash_Benefit_insuredList = premiumCheckInsuredValues,
+                        //cash_Benefit_insured_1 = Insured_1,
+                        //cash_Benefit_insured_2 = Insured_2,
+                        //cash_Benefit_insured_3 = Insured_3,
+                        //cash_Benefit_insured_4 = Insured_4,
+                        //cash_Benefit_insured_5 = Insured_5,
+                        //cash_Benefit_insured_6 = Insured_6,
+                        //cash_Benefit_insured_7 = Insured_7,
+                        //cash_Benefit_insured_8 = Insured_8,
+                        //cash_Benefit_insured_9 = Insured_9,
+                        //cash_Benefit_insured_10 = Insured_10,
+                        //cash_Benefit_insured_11 = Insured_11,
+                        //cash_Benefit_insured_12 = Insured_12,
+                        cash_Benefit_Premium_Check = premiumCheck,
+
+                        //loading_insured_1 = cashBenefitInsured_1,
+                        //loading_insured_2 = cashBenefitInsured_2,
+                        //loading_insured_3 = cashBenefitInsured_3,
+                        //loading_insured_4 = cashBenefitInsured_4,
+                        //loading_insured_5 = cashBenefitInsured_5,
+                        //loading_insured_6 = cashBenefitInsured_6,
+                        //loading_insured_7 = cashBenefitInsured_7,
+                        //loading_insured_8 = cashBenefitInsured_8,
+                        //loading_insured_9 = cashBenefitInsured_9,
+                        //loading_insured_10 = cashBenefitInsured_10,
+                        //loading_insured_11 = cashBenefitInsured_11,
+                        //loading_insured_12 = cashBenefitInsured_12,
+
+                        sum_insured1 = row.sum_insured1,
+                        sum_insured2 = row.sum_insured2,
+                        sum_insured3 = row.sum_insured3,
+                        sum_insured4 = row.sum_insured4,
+                        sum_insured5 = row.sum_insured5,
+                        sum_insured6 = row.sum_insured6,
+                        sum_insured7 = row.sum_insured7,
+                        sum_insured8 = row.sum_insured8,
+                        sum_insured9 = row.sum_insured9,
+                        sum_insured10 = row.sum_insured10,
+                        sum_insured11 = row.sum_insured11,
+                        sum_insured12 = row.sum_insured12,
+
+                        critical_Illness_AddOn_Premium = premium,//chk
+                        critical_Illness_Add_On_Opt = Opt,
+                        critical_Illness_Add_On_SI = SI,
+                        //critical_Illness_Add_On_Premium1 = premium1,
+                        //critical_Illness_Add_On_Premium2 = premium2,
+                        //critical_Illness_Add_On_Premium3 = premium3,
+                        //critical_Illness_Add_On_Premium4 = premium4,
+                        //critical_Illness_Add_On_Premium5 = premium5,
+                        //critical_Illness_Add_On_Premium6 = premium6,
+                        //critical_Illness_Add_On_Premium7 = premium7,
+                        //critical_Illness_Add_On_Premium8 = premium8,
+                        //critical_Illness_Add_On_Premium9 = premium9,
+                        //critical_Illness_Add_On_Premium10 = premium10,
+                        //critical_Illness_Add_On_Premium11 = premium11,
+                        //critical_Illness_Add_On_Premium12 = premium12,
+                        critical_Illness_Add_On_PremiumList = premiums,
+                        // ci_Variant = CIVariant,
+
+                        cash_Benefit_Opt = Opt,
+
+
+                        base_Loading_And_Discount_Final_BasePremium = BaseAndLoading,
+                        base_Loading_And_Discount_Premium = finalBasePremium,
+                        net_premium = row.num_net_premium,
+                        final_Premium_upsell = finalPremium.HasValue ? Math.Round(finalPremium.Value, 2) : (decimal?)0,
+
+                        // netPremium = netPremium,
+                        netPremium = netPremium.HasValue ? Math.Round(netPremium.Value, 2) : (decimal?)0,
+                        GST = GST.HasValue ? Math.Round(GST.Value, 2) : (decimal?)0,
+                        baseprem_cross_Check = baseCrosscheck,
+                        upsellbaseprem_cross_Check = upsellCrosscheck
+
+                       };
+                    }
+                }
             return new List<OptimaSecureRNE> { os };
         }
-
-
         private async Task<decimal?> GetCIRate(int? insuredAge, decimal? CIVariant , string policyPeriod, string sqlpolicyPeriod,Dictionary<string, Hashtable> cirates)
         {
             var ciRate = cirates
