@@ -3880,11 +3880,15 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
         public List<List<string>> FetchNewBatchIds(NpgsqlConnection postgresConnection)
         {
             string? status = ConfigurationManager.AppSettings["Status"];
-            var sqlSource = $"SELECT ir.certificate_no, ir.product_code FROM ins.idst_renewal_data_rgs ir " +
+            var sqlSource = $"SELECT distinct ir.certificate_no, ir.product_code FROM ins.idst_renewal_data_rgs ir " +
                 $"INNER JOIN ins.rne_healthtab ht" +
                 $" ON ir.certificate_no = ht.policy_number " +
                 $"LEFT JOIN ins.premium_validation pt3 ON ir.certificate_no = pt3.certificate_no " +
-                $"WHERE ir.rn_generation_status = @Status AND ht.prod_code = 2856  AND pt3.rn_generation_status IS NULL";
+                $"WHERE ir.rn_generation_status = @Status AND ht.prod_code = 2856 " +
+                $" AND pt3.rn_generation_status IS NULL " +
+                $"AND (upselltype1='SI_UPSELL' OR upselltype2='SI_UPSELL' OR upselltype3 ='SI_UPSELL' " +
+                $"OR upselltype4='SI_UPSELL' OR upselltype5='SI_UPSELL' OR upselltype1='UPSELLBASESI_1'" +
+                $"OR upselltype2 ='UPSELLBASESI_1' OR upselltype3 = 'UPSELLBASESI_1' OR upselltype4 = 'UPSELLBASESI_1' OR upselltype5 = 'UPSELLBASESI_1') ";
             var sourceResults = postgresConnection.Query(sqlSource, new { Status = status });
             var sourceBatchIds = new List<List<string>>();
             foreach (var result in sourceResults)
