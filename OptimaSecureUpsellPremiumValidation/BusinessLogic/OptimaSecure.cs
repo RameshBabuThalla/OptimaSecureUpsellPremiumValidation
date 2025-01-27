@@ -2568,14 +2568,14 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 //var CIVariant10 = string.IsNullOrEmpty(iDSTData.insured1_information2_10) == null? "9" : iDSTData.insured1_information2_10;
                 //var CIVariant11 = string.IsNullOrEmpty(iDSTData.insured1_information2_11) == null ? "9" : iDSTData.insured1_information2_11;
                 //var CIVariant12 = string.IsNullOrEmpty(iDSTData.insured1_information2_12) == null ? "9" : iDSTData.insured1_information2_12;
-                //List<decimal> ciVariants = new List<decimal>();
-                //for (int i = 1; i <= noOfMembers; i++)
-                //{
-                //    decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
+                List<decimal> ciVariants = new List<decimal>();
+                for (int i = 1; i <= noOfMembers; i++)
+                {
+                    decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
 
-                //    ciVariants.Add(ciVariant ?? 9);
-                //}
-                decimal? CIVariant = SI != 0 ? 9 : 0;
+                    ciVariants.Add(ciVariant ?? 9);
+                }
+               // decimal? CIVariant = SI != 0 ? 9 : 0;
                 var policyPeriod = GetColumnNameForPolicyPeriod(policyperiod);
                 if (policyPeriod == null)
                 {
@@ -2590,7 +2590,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 {
                     if (insuredAges[i].HasValue)  // Check if the age is valid
                     {
-                        decimal? ciRate = await GetCIRate(insuredAges[i].Value, CIVariant, policyPeriod, sqlpolicyPeriod, cirates);
+                        decimal? ciRate = await GetCIRate(insuredAges[i].Value, ciVariants[i], policyPeriod, sqlpolicyPeriod, cirates);
                         ciRates.Add(ciRate);  // Add the resulting CI rate to the list
                     }
                     else
