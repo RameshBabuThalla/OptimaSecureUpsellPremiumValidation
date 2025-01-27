@@ -905,6 +905,8 @@ namespace OptimaSecureUpsellPremiumValidation.Models.Domain
         public List<decimal?> critical_Illness_Add_On_PremiumList { get; set; }
         public List<decimal?> loading_premiums { get; set; }
         public List<decimal?> sumInsuredList { get; set; }        
+        public List<decimal?> basesumInsuredList { get; set; }        
+        public List<decimal?> upsellsumInsuredList { get; set; }        
         public decimal? loading_prem1 { get; set; }
         public decimal? loading_prem2 { get; set; }
         public decimal? loading_prem3 { get; set; }
@@ -1153,6 +1155,9 @@ namespace OptimaSecureUpsellPremiumValidation.Models.Domain
         public int? eldest_member { get; set; }
         public int? no_of_members { get; set; }
         public decimal? final_Premium_upsell { get; set; }
+        public decimal? baseprem_cross_Check { get; set; }
+        public decimal? upsellbaseprem_cross_Check { get; set; }
+
 
 
     }
