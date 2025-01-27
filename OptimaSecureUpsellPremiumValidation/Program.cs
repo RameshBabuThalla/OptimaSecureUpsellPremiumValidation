@@ -117,8 +117,7 @@ using (var postgresConnection = new NpgsqlConnection(postgresConnectionString))
                                 await semaphore.WaitAsync();
                                 try
                                 {
-                                    string certificateNo = item[0];
-                                   var baserates = await optimaSecure.GetRatesAsync(dbContext);
+                                    string certificateNo = item[0];                                   
                                     var osRNEDataSecure = await optimaSecure.GetOptimaSecureValidation(certificateNo, baserates, relations, cirates, hdcrates, hdcproportionsplit, deductableDiscount);
                                 }
                                 finally
