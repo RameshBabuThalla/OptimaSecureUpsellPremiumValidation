@@ -27,8 +27,13 @@ Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
     .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")  // Customize console output
     .WriteTo.File(logFilePath, rollingInterval: RollingInterval.Hour,
                   outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")  // Customize file output format
+    .Filter.ByExcluding(logEvent =>
+        logEvent.Properties.ContainsKey("SourceContext") &&
+        logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") &&
+        logEvent.Level == Serilog.Events.LogEventLevel.Information &&
+        logEvent.MessageTemplate.Text.Contains("Executed DbCommand")  // Exclude logs that contain 'Executed DbCommand'
+    )
     .CreateLogger();
-
 
 string connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"]?.ConnectionString;
 
