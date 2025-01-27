@@ -32,7 +32,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
         // Constructor injection of ILogger
         public OptimaSecure(HDFCDbContext hDFCDbContext, ILogger<OptimaSecure> logger)
         {
-            this.dbContext = hDFCDbContext;
+            //this.dbContext = hDFCDbContext;
             _logger = logger;
         }
         public async Task<List<OptimaSecureRNE>> GetGCDataAsync(string policyNo)
@@ -1183,7 +1183,20 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     }
                     else
                     {
-                        await HandleCrosschecksAndUpdateStatus(policyNo, osRNEData.FirstOrDefault(), crosscheck1, crosscheck2, netPremium, finalPremium, gst);
+                        try
+                        {
+                            await HandleCrosschecksAndUpdateStatus(policyNo, osRNEData.FirstOrDefault(), crosscheck1, crosscheck2, netPremium, finalPremium, gst);
+                        }
+                        catch (DbUpdateConcurrencyException ex)
+                        {
+                            var entry = ex.Entries.Single();
+                            await entry.ReloadAsync();
+                        }
+                        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "40P01")
+                        {
+
+                        }
+                       
                     }
                 }
 
@@ -1293,7 +1306,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
     ";
 
                     // Using ExecuteAsync for asynchronous execution
-                    await dbConnection.ExecuteAsync(insertQuery, newRecord);
+                    await dbConnection.ExecuteAsync(insertQuery, newRecord).ConfigureAwait(false);
                     //dbContext.rne_calculated_cover_rg.AddRange(newRecord);
                     //await dbContext.SaveChangesAsync();
 
@@ -2577,7 +2590,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 {
                     if (insuredAges[i].HasValue)  // Check if the age is valid
                     {
-                        decimal? ciRate = await GetCIRate(insuredAges[i].Value, CIVariant, policyPeriod, sqlpolicyPeriod);
+                        decimal? ciRate = await GetCIRate(insuredAges[i].Value, CIVariant, policyPeriod, sqlpolicyPeriod, cirates);
                         ciRates.Add(ciRate);  // Add the resulting CI rate to the list
                     }
                     else
@@ -2874,8 +2887,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                 decimal? Crosscheck = row.num_tot_premium - finalPremium;
                 decimal? Crosscheck2 = row.num_tot_premium - finalPremium;
-
-                var record = dbContext.idst_renewal_data_rgs.FirstOrDefault(item => item.certificate_no == policNo16.ToString());
 
                 var crosscheck2 = Crosscheck2;
 
@@ -3375,19 +3386,31 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
         }
 
 
-        private async Task<decimal?> GetCIRate(int? insuredAge, decimal? CIVariant , string policyPeriod, string sqlpolicyPeriod)
+        private async Task<decimal?> GetCIRate(int? insuredAge, decimal? CIVariant , string policyPeriod, string sqlpolicyPeriod,Dictionary<string, Hashtable> cirates)
         {
-            // Execute the raw SQL query
-            var ciRate = await dbContext.cirates
-                .FromSqlRaw(sqlpolicyPeriod, insuredAge, CIVariant)
-                .Select(r => EF.Property<decimal?>(r, policyPeriod))
-                .FirstOrDefaultAsync();
-            //// Execute the raw SQL query
-            //var ciRate2 = await dbContext.cirates
-            //    .FromSqlRaw(sqlpolicyPeriod, insuredAgeTwo, CIVariant)
-            //    .Select(r => EF.Property<decimal?>(r, policyPeriod))
-            //    .FirstOrDefaultAsync();
-            return ciRate ?? 0;
+            var ciRate = cirates
+                .Where(roww =>
+                {
+                    if (roww.Value is Hashtable rateDetails)
+                    {
+                        return rateDetails.ContainsKey("si") && rateDetails["si"] != null &&
+                               rateDetails.ContainsKey("ci_variant") && rateDetails["ci_variant"] != null &&
+                               (int)rateDetails["si"] == insuredAge &&
+                               (int)rateDetails["ci_variant"] == CIVariant;
+                    }
+                    return false;
+                })
+                .Select(roww =>
+                {
+                    if (roww.Value is Hashtable details && details.ContainsKey(policyPeriod) && details[policyPeriod] != null)
+                    {
+                        return Convert.ToDecimal(details[policyPeriod]);
+                    }
+                    return 0m; // Default to 0 if the value is not found
+                })
+                .FirstOrDefault();  // This will return the first matching rate or 0 if not found
+
+            return ciRate;
         }
 
         private static decimal? GetCiRatesValues(decimal? SI, decimal? ciRate)
