@@ -15,6 +15,7 @@ using OptimaSecureUpsellPremiumValidation;
 using Serilog.Core;
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using System.Data;
+using Serilog.Events;
 
 var builder = Host.CreateDefaultBuilder(args);
 string logFilePath = @"C:\temp\OS_UPSELLLog\app_log.txt";
@@ -25,13 +26,14 @@ Log.Information("OS_UPSELL Application has started.");
 Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
     .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")  
     .WriteTo.File(logFilePath, rollingInterval: RollingInterval.Hour,
-                  outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}") 
+                  outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")
     .Filter.ByExcluding(logEvent =>
         logEvent.Properties.ContainsKey("SourceContext") &&
         logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") &&
         logEvent.Level == Serilog.Events.LogEventLevel.Information &&
-        logEvent.MessageTemplate.Text.Contains("Executed DbCommand")  
+        logEvent.MessageTemplate.Text.Contains("Executed DbCommand")  // Exclude logs that contain 'Executed DbCommand'
     )
+
     .CreateLogger();
 
 string connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"]?.ConnectionString;
@@ -145,7 +147,7 @@ using (var postgresConnection = new NpgsqlConnection(postgresConnectionString))
 
 Console.WriteLine("Schedular is Completed!");
 Log.Information("Application has finished processing.");
-EmailService.SendEmail();
+//EmailService.SendEmail();
 Log.CloseAndFlush();
 
 
