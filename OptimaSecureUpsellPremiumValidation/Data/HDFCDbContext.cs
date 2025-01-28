@@ -160,12 +160,12 @@ namespace OptimaSecureUpsellPremiumValidation.Data
         }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            if (!optionsBuilder.IsConfigured) // Check if options have already been configured
+            if (!optionsBuilder.IsConfigured) 
             {
                 string dbConn = _configuration.GetConnectionString("DefaultConnection");
                 optionsBuilder
                    .UseNpgsql(dbConn)
-                    .EnableSensitiveDataLogging(); // Enables detailed error information
+                    .EnableSensitiveDataLogging(false);
             }
         }
 

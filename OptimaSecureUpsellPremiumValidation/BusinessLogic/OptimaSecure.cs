@@ -39,7 +39,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
         {
             string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
 
-            // SQL Query for the join
             string sqlQuery = @"
         SELECT 
          os.prod_code,
@@ -563,68 +562,22 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             os.policy_number = @PolicyNo";
             try
             {
-                // Using Dapper to execute the query
                 using (var connection = new NpgsqlConnection(connectionString))
-                {
-                    //
-
-                    // Execute the query asynchronously and map the results to OptimaSecureRNE
+                {                 
                     var osRNEData = await connection.QueryAsync<OptimaSecureRNE>(sqlQuery, new { PolicyNo = policyNo }).ConfigureAwait(false);
-                    // Log the data (you can add more logging or details as needed)
-                    //Log.Information("gc");
-
-                    // Return the list of results
+                   
                     return osRNEData.ToList();
                 }
             }
             catch (Exception ex)
-            {
-                // Log the error (you can replace this with your preferred logging mechanism)
-                Log.Error(ex, "An error occurred while fetching GC data for policy: {PolicyNo}", policyNo);
-                //throw; // Re-throw the exception to allow higher-level handlers to catch it
+            {               
+                Log.Error(ex, "An error occurred while fetching GC data for policy: {PolicyNo}", policyNo);              
                 return new List<OptimaSecureRNE>();
             }
-        }
-        async Task<verifiedpremiumvalues> GetCrosscheckValue(string policyNo, List<OptimaSecureRNE> orRNEData)
+        }     
+        public async Task GetOptimaSecureValidation(string policyNo, Dictionary<string, Hashtable> baseRateHashTable, Dictionary<string, Hashtable> relations, Dictionary<string, Hashtable> cirates, Dictionary<string, Hashtable> deductableDiscount, Dictionary<string, Hashtable> hdcproportionsplit, Dictionary<string, Hashtable> hdcrates)
         {
-            string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
-            using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
-            {
-                dbConnection.Open();
-                // Check if the record exists by selecting only required columns
-                    var record = dbConnection.QueryFirstOrDefault<premium_validation>(
-                        "SELECT certificate_no,verified_prem,verified_gst,verified_total_prem FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
-                        new { CertificateNo = policyNo.ToString() });
-
-                if (record != null && record.rn_generation_status == null)
-                {
-                    decimal? crosscheck1 = (orRNEData.FirstOrDefault()?.num_tot_premium ?? 0) - (record.verified_total_prem ?? 0);
-                    return new verifiedpremiumvalues
-                    {
-                        verified_gst = record.verified_gst ?? 0, 
-                        verified_total_premium = record.verified_total_prem ?? 0,
-                        verified_net_premium = record.verified_prem ?? 0,
-                        crosscheck = crosscheck1
-                    };
-                
-                }
-                else
-                {
-                    return new verifiedpremiumvalues
-                    {
-                        verified_gst = 0,  // Default values
-                        verified_total_premium = 0,
-                        verified_net_premium = 0,
-                        crosscheck = null
-                    };
-                }
-
-            }
-        }
-       
-        public async Task<OptimaSecurePremiumValidationUpsell> GetOptimaSecureValidation(string policyNo, Dictionary<string, Hashtable> baseRateHashTable, Dictionary<string, Hashtable> relations, Dictionary<string, Hashtable> cirates, Dictionary<string, Hashtable> deductableDiscount, Dictionary<string, Hashtable> hdcproportionsplit, Dictionary<string, Hashtable> hdcrates)
-        {
-            List <OptimaSecureRNE> osRNEData;         
+            List<OptimaSecureRNE> osRNEData;
             IEnumerable<OptimaSecureRNE> osRNEDataUpSell = Enumerable.Empty<OptimaSecureRNE>();
             osRNEData = await GetGCDataAsync(policyNo);
             if (osRNEData != null && osRNEData.Any())
@@ -634,716 +587,659 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     if (row.upselltype1 == "SI_UPSELL" || row.upselltype2 == "SI_UPSELL" || row.upselltype3 == "SI_UPSELL" || row.upselltype4 == "SI_UPSELL" || row.upselltype5 == "SI_UPSELL" || row.upselltype1 == "UPSELLBASESI_1" || row.upselltype2 == "UPSELLBASESI_1" || row.upselltype3 == "UPSELLBASESI_1" || row.upselltype4 == "UPSELLBASESI_1" || row.upselltype5 == "UPSELLBASESI_1")
                     {
                         osRNEDataUpSell = await CalculateOptimaSecurePremiumqUpsell
-                            (osRNEData,policyNo, baseRateHashTable, relations, cirates, deductableDiscount, hdcproportionsplit, hdcrates);
+                            (osRNEData, policyNo, baseRateHashTable, relations, cirates, deductableDiscount, hdcproportionsplit, hdcrates);
+                        
+                    OptimaSecurePremiumValidationUpsell objOptimaSecurePremiumValidationUpSell = new OptimaSecurePremiumValidationUpsell
+                    {
+                        policy_number = osRNEData.FirstOrDefault()?.policy_number,
+                        reference_num = osRNEData.FirstOrDefault()?.reference_num,
+                        prod_code = osRNEData.FirstOrDefault()?.prod_code,
+                        prod_name = osRNEData.FirstOrDefault()?.prod_name,
+                        batchid = osRNEData.FirstOrDefault()?.batchid,
+                        customer_id = osRNEData.FirstOrDefault()?.customer_id,
+                        customername = osRNEData.FirstOrDefault()?.customername,
+                        policy_start_date = osRNEData.FirstOrDefault()?.policy_start_date,
+                        policy_expiry_date = osRNEData.FirstOrDefault()?.policy_expiry_date,
+                        txt_salutation = osRNEData.FirstOrDefault()?.txt_salutation,
+                        location_code = osRNEData.FirstOrDefault()?.location_code,
+                        txt_apartment = osRNEData.FirstOrDefault()?.txt_apartment,
+                        txt_street = osRNEData.FirstOrDefault()?.txt_street,
+                        txt_areavillage = osRNEData.FirstOrDefault()?.txt_areavillage,
+                        txt_citydistrict = osRNEData.FirstOrDefault()?.txt_citydistrict,
+                        txt_state = osRNEData.FirstOrDefault()?.txt_state,
+                        state_code = osRNEData.FirstOrDefault()?.state_code,
+                        state_regis = osRNEData.FirstOrDefault()?.state_regis,
+                        txt_pincode = osRNEData.FirstOrDefault()?.txt_pincode,
+                        txt_nationality = osRNEData.FirstOrDefault()?.txt_nationality,
+                        split_flag = osRNEData.FirstOrDefault()?.split_flag,
+                        txt_family = osRNEData.FirstOrDefault()?.txt_family,
+                        policyplan = osRNEData.FirstOrDefault()?.policyplan,
+                        policy_type = osRNEData.FirstOrDefault()?.policy_type,
+                        policy_period = osRNEData.FirstOrDefault()?.policy_period,
+                        verticalname = osRNEData.FirstOrDefault()?.verticalname,
+                        vertical_name = osRNEData.FirstOrDefault()?.vertical_name,
+                        no_of_members = osRNEData.FirstOrDefault()?.no_of_members,
+                        eldest_member = osRNEData.FirstOrDefault()?.eldest_member,
+
+                        optima_secure_gst = osRNEData.FirstOrDefault()?.optima_secure_gst.HasValue == true
+            ? (decimal?)Math.Round(osRNEData.FirstOrDefault().optima_secure_gst.Value, 2)
+            : (decimal?)null,
+
+                        upselltype1 = osRNEDataUpSell.FirstOrDefault()?.upselltype1,
+                        upselltype2 = osRNEDataUpSell.FirstOrDefault()?.upselltype2,
+                        upselltype3 = osRNEDataUpSell.FirstOrDefault()?.upselltype3,
+                        upselltype4 = osRNEDataUpSell.FirstOrDefault()?.upselltype4,
+                        upselltype5 = osRNEDataUpSell.FirstOrDefault()?.upselltype5,
+
+                        upsellvalue1 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue1,
+                        upsellvalue2 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue2,
+                        upsellvalue3 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue3,
+                        upsellvalue4 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue4,
+                        upsellvalue5 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue5,
+
+                        upsellpremium1 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium1,
+                        upsellpremium2 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium2,
+                        upsellpremium3 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium3,
+                        upsellpremium4 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium4,
+                        upsellpremium5 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium5,
+
+                        insured_loadingper1 = osRNEData.FirstOrDefault()?.insured_loadingper1,
+                        insured_loadingper2 = osRNEData.FirstOrDefault()?.insured_loadingper2,
+                        insured_loadingper3 = osRNEData.FirstOrDefault()?.insured_loadingper3,
+                        insured_loadingper4 = osRNEData.FirstOrDefault()?.insured_loadingper4,
+                        insured_loadingper5 = osRNEData.FirstOrDefault()?.insured_loadingper5,
+                        insured_loadingper6 = osRNEData.FirstOrDefault()?.insured_loadingper6,
+                        insured_loadingper7 = osRNEData.FirstOrDefault()?.insured_loadingper7,
+                        insured_loadingper8 = osRNEData.FirstOrDefault()?.insured_loadingper8,
+                        insured_loadingper9 = osRNEData.FirstOrDefault()?.insured_loadingper9,
+                        insured_loadingper10 = osRNEData.FirstOrDefault()?.insured_loadingper10,
+                        insured_loadingper11 = osRNEData.FirstOrDefault()?.insured_loadingper11,
+                        insured_loadingper12 = osRNEData.FirstOrDefault()?.insured_loadingper12,
+
+                        txt_insuredname1 = osRNEData.FirstOrDefault()?.txt_insuredname1,
+                        txt_insuredname2 = osRNEData.FirstOrDefault()?.txt_insuredname2,
+                        txt_insuredname3 = osRNEData.FirstOrDefault()?.txt_insuredname3,
+                        txt_insuredname4 = osRNEData.FirstOrDefault()?.txt_insuredname4,
+                        txt_insuredname5 = osRNEData.FirstOrDefault()?.txt_insuredname5,
+                        txt_insuredname6 = osRNEData.FirstOrDefault()?.txt_insuredname6,
+                        txt_insuredname7 = osRNEData.FirstOrDefault()?.txt_insuredname7,
+                        txt_insuredname8 = osRNEData.FirstOrDefault()?.txt_insuredname8,
+                        txt_insuredname9 = osRNEData.FirstOrDefault()?.txt_insuredname9,
+                        txt_insuredname10 = osRNEData.FirstOrDefault()?.txt_insuredname10,
+                        txt_insuredname11 = osRNEData.FirstOrDefault()?.txt_insuredname11,
+                        txt_insuredname12 = osRNEData.FirstOrDefault()?.txt_insuredname12,
+
+                        txt_insured_entrydate1 = osRNEData.FirstOrDefault()?.txt_insured_entrydate1,
+                        txt_insured_entrydate2 = osRNEData.FirstOrDefault()?.txt_insured_entrydate2,
+                        txt_insured_entrydate3 = osRNEData.FirstOrDefault()?.txt_insured_entrydate3,
+                        txt_insured_entrydate4 = osRNEData.FirstOrDefault()?.txt_insured_entrydate4,
+                        txt_insured_entrydate5 = osRNEData.FirstOrDefault()?.txt_insured_entrydate5,
+                        txt_insured_entrydate6 = osRNEData.FirstOrDefault()?.txt_insured_entrydate6,
+                        txt_insured_entrydate7 = osRNEData.FirstOrDefault()?.txt_insured_entrydate7,
+                        txt_insured_entrydate8 = osRNEData.FirstOrDefault()?.txt_insured_entrydate8,
+                        txt_insured_entrydate9 = osRNEData.FirstOrDefault()?.txt_insured_entrydate9,
+                        txt_insured_entrydate10 = osRNEData.FirstOrDefault()?.txt_insured_entrydate10,
+                        txt_insured_entrydate11 = osRNEData.FirstOrDefault()?.txt_insured_entrydate11,
+                        txt_insured_entrydate12 = osRNEData.FirstOrDefault()?.txt_insured_entrydate12,
+
+                        member_id1 = osRNEData.FirstOrDefault()?.member_id1,
+                        member_id2 = osRNEData.FirstOrDefault()?.member_id2,
+                        member_id3 = osRNEData.FirstOrDefault()?.member_id3,
+                        member_id4 = osRNEData.FirstOrDefault()?.member_id4,
+                        member_id5 = osRNEData.FirstOrDefault()?.member_id5,
+                        member_id6 = osRNEData.FirstOrDefault()?.member_id6,
+                        member_id7 = osRNEData.FirstOrDefault()?.member_id7,
+                        member_id8 = osRNEData.FirstOrDefault()?.member_id8,
+                        member_id9 = osRNEData.FirstOrDefault()?.member_id9,
+                        member_id10 = osRNEData.FirstOrDefault()?.member_id10,
+                        member_id11 = osRNEData.FirstOrDefault()?.member_id11,
+                        member_id12 = osRNEData.FirstOrDefault()?.member_id12,
+
+                        insured_loadingamt1 = osRNEData.FirstOrDefault()?.insured_loadingamt1,
+                        insured_loadingamt2 = osRNEData.FirstOrDefault()?.insured_loadingamt2,
+                        insured_loadingamt3 = osRNEData.FirstOrDefault()?.insured_loadingamt3,
+                        insured_loadingamt4 = osRNEData.FirstOrDefault()?.insured_loadingamt4,
+                        insured_loadingamt5 = osRNEData.FirstOrDefault()?.insured_loadingamt5,
+                        insured_loadingamt6 = osRNEData.FirstOrDefault()?.insured_loadingamt6,
+                        insured_loadingamt7 = osRNEData.FirstOrDefault()?.insured_loadingamt7,
+                        insured_loadingamt8 = osRNEData.FirstOrDefault()?.insured_loadingamt8,
+                        insured_loadingamt9 = osRNEData.FirstOrDefault()?.insured_loadingamt9,
+                        insured_loadingamt10 = osRNEData.FirstOrDefault()?.insured_loadingamt10,
+                        insured_loadingamt11 = osRNEData.FirstOrDefault()?.insured_loadingamt11,
+                        insured_loadingamt12 = osRNEData.FirstOrDefault()?.insured_loadingamt12,
+
+                        txt_insured_dob1 = osRNEData.FirstOrDefault()?.txt_insured_dob1,
+                        txt_insured_dob2 = osRNEData.FirstOrDefault()?.txt_insured_dob2,
+                        txt_insured_dob3 = osRNEData.FirstOrDefault()?.txt_insured_dob3,
+                        txt_insured_dob4 = osRNEData.FirstOrDefault()?.txt_insured_dob4,
+                        txt_insured_dob5 = osRNEData.FirstOrDefault()?.txt_insured_dob5,
+                        txt_insured_dob6 = osRNEData.FirstOrDefault()?.txt_insured_dob6,
+                        txt_insured_dob7 = osRNEData.FirstOrDefault()?.txt_insured_dob7,
+                        txt_insured_dob8 = osRNEData.FirstOrDefault()?.txt_insured_dob8,
+                        txt_insured_dob9 = osRNEData.FirstOrDefault()?.txt_insured_dob9,
+                        txt_insured_dob10 = osRNEData.FirstOrDefault()?.txt_insured_dob10,
+                        txt_insured_dob11 = osRNEData.FirstOrDefault()?.txt_insured_dob11,
+                        txt_insured_dob12 = osRNEData.FirstOrDefault()?.txt_insured_dob12,
+
+                        txt_insured_age1 = osRNEData.FirstOrDefault()?.txt_insured_age1,
+                        txt_insured_age2 = osRNEData.FirstOrDefault()?.txt_insured_age2,
+                        txt_insured_age3 = osRNEData.FirstOrDefault()?.txt_insured_age3,
+                        txt_insured_age4 = osRNEData.FirstOrDefault()?.txt_insured_age4,
+                        txt_insured_age5 = osRNEData.FirstOrDefault()?.txt_insured_age5,
+                        txt_insured_age6 = osRNEData.FirstOrDefault()?.txt_insured_age6,
+                        txt_insured_age7 = osRNEData.FirstOrDefault()?.txt_insured_age7,
+                        txt_insured_age8 = osRNEData.FirstOrDefault()?.txt_insured_age8,
+                        txt_insured_age9 = osRNEData.FirstOrDefault()?.txt_insured_age9,
+                        txt_insured_age10 = osRNEData.FirstOrDefault()?.txt_insured_age10,
+                        txt_insured_age11 = osRNEData.FirstOrDefault()?.txt_insured_age11,
+                        txt_insured_age12 = osRNEData.FirstOrDefault()?.txt_insured_age12,
+
+                        txt_insured_relation1 = osRNEData.FirstOrDefault()?.txt_insured_relation1,
+                        txt_insured_relation2 = osRNEData.FirstOrDefault()?.txt_insured_relation2,
+                        txt_insured_relation3 = osRNEData.FirstOrDefault()?.txt_insured_relation3,
+                        txt_insured_relation4 = osRNEData.FirstOrDefault()?.txt_insured_relation4,
+                        txt_insured_relation5 = osRNEData.FirstOrDefault()?.txt_insured_relation5,
+                        txt_insured_relation6 = osRNEData.FirstOrDefault()?.txt_insured_relation6,
+                        txt_insured_relation7 = osRNEData.FirstOrDefault()?.txt_insured_relation7,
+                        txt_insured_relation8 = osRNEData.FirstOrDefault()?.txt_insured_relation8,
+                        txt_insured_relation9 = osRNEData.FirstOrDefault()?.txt_insured_relation9,
+                        txt_insured_relation10 = osRNEData.FirstOrDefault()?.txt_insured_relation10,
+                        txt_insured_relation11 = osRNEData.FirstOrDefault()?.txt_insured_relation11,
+                        txt_insured_relation12 = osRNEData.FirstOrDefault()?.txt_insured_relation12,
+
+                        insured_relation_tag_1 = osRNEData.FirstOrDefault()?.insured_relation_tag_1,
+                        insured_relation_tag_2 = osRNEData.FirstOrDefault()?.insured_relation_tag_2,
+                        insured_relation_tag_3 = osRNEData.FirstOrDefault()?.insured_relation_tag_3,
+                        insured_relation_tag_4 = osRNEData.FirstOrDefault()?.insured_relation_tag_4,
+                        insured_relation_tag_5 = osRNEData.FirstOrDefault()?.insured_relation_tag_5,
+                        insured_relation_tag_6 = osRNEData.FirstOrDefault()?.insured_relation_tag_6,
+                        insured_relation_tag_7 = osRNEData.FirstOrDefault()?.insured_relation_tag_7,
+                        insured_relation_tag_8 = osRNEData.FirstOrDefault()?.insured_relation_tag_8,
+                        insured_relation_tag_9 = osRNEData.FirstOrDefault()?.insured_relation_tag_9,
+                        insured_relation_tag_10 = osRNEData.FirstOrDefault()?.insured_relation_tag_10,
+                        insured_relation_tag_11 = osRNEData.FirstOrDefault()?.insured_relation_tag_11,
+                        insured_relation_tag_12 = osRNEData.FirstOrDefault()?.insured_relation_tag_12,
+
+                        pre_existing_disease1 = osRNEData.FirstOrDefault()?.pre_existing_disease1,
+                        pre_existing_disease2 = osRNEData.FirstOrDefault()?.pre_existing_disease2,
+                        pre_existing_disease3 = osRNEData.FirstOrDefault()?.pre_existing_disease3,
+                        pre_existing_disease4 = osRNEData.FirstOrDefault()?.pre_existing_disease4,
+                        pre_existing_disease5 = osRNEData.FirstOrDefault()?.pre_existing_disease5,
+                        pre_existing_disease6 = osRNEData.FirstOrDefault()?.pre_existing_disease6,
+                        pre_existing_disease7 = osRNEData.FirstOrDefault()?.pre_existing_disease7,
+                        pre_existing_disease8 = osRNEData.FirstOrDefault()?.pre_existing_disease8,
+                        pre_existing_disease9 = osRNEData.FirstOrDefault()?.pre_existing_disease9,
+                        pre_existing_disease10 = osRNEData.FirstOrDefault()?.pre_existing_disease10,
+                        pre_existing_disease11 = osRNEData.FirstOrDefault()?.pre_existing_disease11,
+                        pre_existing_disease12 = osRNEData.FirstOrDefault()?.pre_existing_disease12,
+
+                        insured_cb1 = osRNEData.FirstOrDefault()?.insured_cb1,
+                        insured_cb2 = osRNEData.FirstOrDefault()?.insured_cb2,
+                        insured_cb3 = osRNEData.FirstOrDefault()?.insured_cb3,
+                        insured_cb4 = osRNEData.FirstOrDefault()?.insured_cb4,
+                        insured_cb5 = osRNEData.FirstOrDefault()?.insured_cb5,
+                        insured_cb6 = osRNEData.FirstOrDefault()?.insured_cb6,
+                        insured_cb7 = osRNEData.FirstOrDefault()?.insured_cb7,
+                        insured_cb8 = osRNEData.FirstOrDefault()?.insured_cb8,
+                        insured_cb9 = osRNEData.FirstOrDefault()?.insured_cb9,
+                        insured_cb10 = osRNEData.FirstOrDefault()?.insured_cb10,
+                        insured_cb11 = osRNEData.FirstOrDefault()?.insured_cb11,
+                        insured_cb12 = osRNEData.FirstOrDefault()?.insured_cb12,
+
+                        sum_insured1 = osRNEData.FirstOrDefault()?.sum_insured1,
+                        sum_insured2 = osRNEData.FirstOrDefault()?.sum_insured2,
+                        sum_insured3 = osRNEData.FirstOrDefault()?.sum_insured3,
+                        sum_insured4 = osRNEData.FirstOrDefault()?.sum_insured4,
+                        sum_insured5 = osRNEData.FirstOrDefault()?.sum_insured5,
+                        sum_insured6 = osRNEData.FirstOrDefault()?.sum_insured6,
+                        sum_insured7 = osRNEData.FirstOrDefault()?.sum_insured7,
+                        sum_insured8 = osRNEData.FirstOrDefault()?.sum_insured8,
+                        sum_insured9 = osRNEData.FirstOrDefault()?.sum_insured9,
+                        sum_insured10 = osRNEData.FirstOrDefault()?.sum_insured10,
+                        sum_insured11 = osRNEData.FirstOrDefault()?.sum_insured11,
+                        sum_insured12 = osRNEData.FirstOrDefault()?.sum_insured12,
+
+                        insured_deductable1 = osRNEData.FirstOrDefault()?.insured_deductable1,
+                        insured_deductable2 = osRNEData.FirstOrDefault()?.insured_deductable2,
+                        insured_deductable3 = osRNEData.FirstOrDefault()?.insured_deductable3,
+                        insured_deductable4 = osRNEData.FirstOrDefault()?.insured_deductable4,
+                        insured_deductable5 = osRNEData.FirstOrDefault()?.insured_deductable5,
+                        insured_deductable6 = osRNEData.FirstOrDefault()?.insured_deductable6,
+                        insured_deductable7 = osRNEData.FirstOrDefault()?.insured_deductable7,
+                        insured_deductable8 = osRNEData.FirstOrDefault()?.insured_deductable8,
+                        insured_deductable9 = osRNEData.FirstOrDefault()?.insured_deductable9,
+                        insured_deductable10 = osRNEData.FirstOrDefault()?.insured_deductable10,
+                        insured_deductable11 = osRNEData.FirstOrDefault()?.insured_deductable11,
+                        insured_deductable12 = osRNEData.FirstOrDefault()?.insured_deductable12,
+
+                        wellness_discount1 = osRNEData.FirstOrDefault()?.wellness_discount1,
+                        wellness_discount2 = osRNEData.FirstOrDefault()?.wellness_discount2,
+                        wellness_discount3 = osRNEData.FirstOrDefault()?.wellness_discount3,
+                        wellness_discount4 = osRNEData.FirstOrDefault()?.wellness_discount4,
+                        wellness_discount5 = osRNEData.FirstOrDefault()?.wellness_discount5,
+                        wellness_discount6 = osRNEData.FirstOrDefault()?.wellness_discount6,
+                        wellness_discount7 = osRNEData.FirstOrDefault()?.wellness_discount7,
+                        wellness_discount8 = osRNEData.FirstOrDefault()?.wellness_discount8,
+                        wellness_discount9 = osRNEData.FirstOrDefault()?.wellness_discount9,
+                        wellness_discount10 = osRNEData.FirstOrDefault()?.wellness_discount10,
+                        wellness_discount11 = osRNEData.FirstOrDefault()?.wellness_discount11,
+                        wellness_discount12 = osRNEData.FirstOrDefault()?.wellness_discount12,
+
+                        stayactive1 = osRNEData.FirstOrDefault()?.stayactive1,
+                        stayactive2 = osRNEData.FirstOrDefault()?.stayactive2,
+                        stayactive3 = osRNEData.FirstOrDefault()?.stayactive3,
+                        stayactive4 = osRNEData.FirstOrDefault()?.stayactive4,
+                        stayactive5 = osRNEData.FirstOrDefault()?.stayactive5,
+                        stayactive6 = osRNEData.FirstOrDefault()?.stayactive6,
+                        stayactive7 = osRNEData.FirstOrDefault()?.stayactive7,
+                        stayactive8 = osRNEData.FirstOrDefault()?.stayactive8,
+                        stayactive9 = osRNEData.FirstOrDefault()?.stayactive9,
+                        stayactive10 = osRNEData.FirstOrDefault()?.stayactive10,
+                        stayactive11 = osRNEData.FirstOrDefault()?.stayactive11,
+                        stayactive12 = osRNEData.FirstOrDefault()?.stayactive12,
+
+                        coverbaseloadingrate1 = osRNEData.FirstOrDefault()?.coverbaseloadingrate1,
+                        coverbaseloadingrate2 = osRNEData.FirstOrDefault()?.coverbaseloadingrate2,
+                        coverbaseloadingrate3 = osRNEData.FirstOrDefault()?.coverbaseloadingrate3,
+                        coverbaseloadingrate4 = osRNEData.FirstOrDefault()?.coverbaseloadingrate4,
+                        coverbaseloadingrate5 = osRNEData.FirstOrDefault()?.coverbaseloadingrate5,
+                        coverbaseloadingrate6 = osRNEData.FirstOrDefault()?.coverbaseloadingrate6,
+                        coverbaseloadingrate7 = osRNEData.FirstOrDefault()?.coverbaseloadingrate7,
+                        coverbaseloadingrate8 = osRNEData.FirstOrDefault()?.coverbaseloadingrate8,
+                        coverbaseloadingrate9 = osRNEData.FirstOrDefault()?.coverbaseloadingrate9,
+                        coverbaseloadingrate10 = osRNEData.FirstOrDefault()?.coverbaseloadingrate10,
+                        coverbaseloadingrate11 = osRNEData.FirstOrDefault()?.coverbaseloadingrate11,
+                        coverbaseloadingrate12 = osRNEData.FirstOrDefault()?.coverbaseloadingrate12,
+
+                        health_incentive1 = osRNEData.FirstOrDefault()?.health_incentive1,
+                        health_incentive2 = osRNEData.FirstOrDefault()?.health_incentive2,
+                        health_incentive3 = osRNEData.FirstOrDefault()?.health_incentive3,
+                        health_incentive4 = osRNEData.FirstOrDefault()?.health_incentive4,
+                        health_incentive5 = osRNEData.FirstOrDefault()?.health_incentive5,
+                        health_incentive6 = osRNEData.FirstOrDefault()?.health_incentive6,
+                        health_incentive7 = osRNEData.FirstOrDefault()?.health_incentive7,
+                        health_incentive8 = osRNEData.FirstOrDefault()?.health_incentive8,
+                        health_incentive9 = osRNEData.FirstOrDefault()?.health_incentive9,
+                        health_incentive10 = osRNEData.FirstOrDefault()?.health_incentive10,
+                        health_incentive11 = osRNEData.FirstOrDefault()?.health_incentive11,
+                        health_incentive12 = osRNEData.FirstOrDefault()?.health_incentive12,
+
+                        fitness_discount1 = osRNEData.FirstOrDefault()?.fitness_discount1,
+                        fitness_discount2 = osRNEData.FirstOrDefault()?.fitness_discount2,
+                        fitness_discount3 = osRNEData.FirstOrDefault()?.fitness_discount3,
+                        fitness_discount4 = osRNEData.FirstOrDefault()?.fitness_discount4,
+                        fitness_discount5 = osRNEData.FirstOrDefault()?.fitness_discount5,
+                        fitness_discount6 = osRNEData.FirstOrDefault()?.fitness_discount6,
+                        fitness_discount7 = osRNEData.FirstOrDefault()?.fitness_discount7,
+                        fitness_discount8 = osRNEData.FirstOrDefault()?.fitness_discount8,
+                        fitness_discount9 = osRNEData.FirstOrDefault()?.fitness_discount9,
+                        fitness_discount10 = osRNEData.FirstOrDefault()?.fitness_discount10,
+                        fitness_discount11 = osRNEData.FirstOrDefault()?.fitness_discount11,
+                        fitness_discount12 = osRNEData.FirstOrDefault()?.fitness_discount12,
+
+                        reservbenefis1 = osRNEData.FirstOrDefault()?.reservbenefis1,
+                        reservbenefis2 = osRNEData.FirstOrDefault()?.reservbenefis2,
+                        reservbenefis3 = osRNEData.FirstOrDefault()?.reservbenefis3,
+                        reservbenefis4 = osRNEData.FirstOrDefault()?.reservbenefis4,
+                        reservbenefis5 = osRNEData.FirstOrDefault()?.reservbenefis5,
+                        reservbenefis6 = osRNEData.FirstOrDefault()?.reservbenefis6,
+                        reservbenefis7 = osRNEData.FirstOrDefault()?.reservbenefis7,
+                        reservbenefis8 = osRNEData.FirstOrDefault()?.reservbenefis8,
+                        reservbenefis9 = osRNEData.FirstOrDefault()?.reservbenefis9,
+                        reservbenefis10 = osRNEData.FirstOrDefault()?.reservbenefis10,
+                        reservbenefis11 = osRNEData.FirstOrDefault()?.reservbenefis11,
+                        reservbenefis12 = osRNEData.FirstOrDefault()?.reservbenefis12,
+
+                        insured_rb_claimamt1 = osRNEData.FirstOrDefault()?.insured_rb_claimamt1,
+                        insured_rb_claimamt2 = osRNEData.FirstOrDefault()?.insured_rb_claimamt2,
+                        insured_rb_claimamt3 = osRNEData.FirstOrDefault()?.insured_rb_claimamt3,
+                        insured_rb_claimamt4 = osRNEData.FirstOrDefault()?.insured_rb_claimamt4,
+                        insured_rb_claimamt5 = osRNEData.FirstOrDefault()?.insured_rb_claimamt5,
+                        insured_rb_claimamt6 = osRNEData.FirstOrDefault()?.insured_rb_claimamt6,
+                        insured_rb_claimamt7 = osRNEData.FirstOrDefault()?.insured_rb_claimamt7,
+                        insured_rb_claimamt8 = osRNEData.FirstOrDefault()?.insured_rb_claimamt8,
+                        insured_rb_claimamt9 = osRNEData.FirstOrDefault()?.insured_rb_claimamt9,
+                        insured_rb_claimamt10 = osRNEData.FirstOrDefault()?.insured_rb_claimamt10,
+                        insured_rb_claimamt11 = osRNEData.FirstOrDefault()?.insured_rb_claimamt11,
+                        insured_rb_claimamt12 = osRNEData.FirstOrDefault()?.insured_rb_claimamt12,
+
+                        combi_discount = osRNEData.FirstOrDefault()?.combi_discount,
+                        employee_discount = osRNEData.FirstOrDefault()?.employee_discount,
+                        online_discount = osRNEData.FirstOrDefault()?.online_discount,
+                        loyalty_discount = osRNEData.FirstOrDefault()?.loyalty_discount,
+                        tenure_discount = osRNEData.FirstOrDefault()?.tenure_discount,
+                        loading_premium = osRNEData.FirstOrDefault()?.loading_premium,
+                        family_discount = osRNEData.FirstOrDefault()?.family_discount,
+                        dedcutable_discount = osRNEData.FirstOrDefault()?.dedcutable_discount,
+
+                        base_premium_1 = osRNEData.FirstOrDefault()?.base_premium_1,
+                        base_premium_2 = osRNEData.FirstOrDefault()?.base_premium_2,
+                        base_premium_3 = osRNEData.FirstOrDefault()?.base_premium_3,
+                        base_premium_4 = osRNEData.FirstOrDefault()?.base_premium_4,
+                        base_premium_5 = osRNEData.FirstOrDefault()?.base_premium_5,
+                        base_premium_6 = osRNEData.FirstOrDefault()?.base_premium_6,
+                        base_premium_7 = osRNEData.FirstOrDefault()?.base_premium_7,
+                        base_premium_8 = osRNEData.FirstOrDefault()?.base_premium_8,
+                        base_premium_9 = osRNEData.FirstOrDefault()?.base_premium_9,
+                        base_premium_10 = osRNEData.FirstOrDefault()?.base_premium_10,
+                        base_premium_11 = osRNEData.FirstOrDefault()?.base_premium_11,
+                        base_premium_12 = osRNEData.FirstOrDefault()?.base_premium_12,
+                        base_premium = osRNEData.FirstOrDefault()?.base_premium,
+                        base_premium_after_deductible = osRNEData.FirstOrDefault()?.base_premium_after_deductible,
+
+                        loading_prem1 = osRNEData.FirstOrDefault()?.loading_prem1,
+                        loading_prem2 = osRNEData.FirstOrDefault()?.loading_prem2,
+                        loading_prem3 = osRNEData.FirstOrDefault()?.loading_prem3,
+                        loading_prem4 = osRNEData.FirstOrDefault()?.loading_prem4,
+                        loading_prem5 = osRNEData.FirstOrDefault()?.loading_prem5,
+                        loading_prem6 = osRNEData.FirstOrDefault()?.loading_prem6,
+                        loading_prem7 = osRNEData.FirstOrDefault()?.loading_prem7,
+                        loading_prem8 = osRNEData.FirstOrDefault()?.loading_prem8,
+                        loading_prem9 = osRNEData.FirstOrDefault()?.loading_prem9,
+                        loading_prem10 = osRNEData.FirstOrDefault()?.loading_prem10,
+                        loading_prem11 = osRNEData.FirstOrDefault()?.loading_prem11,
+                        loading_prem12 = osRNEData.FirstOrDefault()?.loading_prem12,
+                        loading_prem_total = osRNEData.FirstOrDefault()?.loading_prem_total,
+
+                        cash_benefit_loading_prem_1 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_1,
+                        cash_benefit_loading_prem_2 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_2,
+                        cash_benefit_loading_prem_3 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_3,
+                        cash_benefit_loading_prem_4 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_4,
+                        cash_benefit_loading_prem_5 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_5,
+                        cash_benefit_loading_prem_6 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_6,
+                        cash_benefit_loading_prem_7 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_7,
+                        cash_benefit_loading_prem_8 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_8,
+                        cash_benefit_loading_prem_9 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_9,
+                        cash_benefit_loading_prem_10 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_10,
+                        cash_benefit_loading_prem_11 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_11,
+                        cash_benefit_loading_prem_12 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_12,
+                        cash_benefit_loading_prem_total = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_total,
+
+                        baseAndLoading = osRNEData.FirstOrDefault()?.baseAndLoading,
+                        baseAndLoading_LoyaltyDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_LoyaltyDiscount,
+                        baseAndLoading_EmployeeDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_EmployeeDiscount,
+                        baseAndLoading_OnlineDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_OnlineDiscount,
+                        baseAndLoading_CombiDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_CombiDiscount,
+                        baseAndLoading_CapppedDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_CapppedDiscount,
+                        baseAndLoading_LongTermDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_LongTermDiscount,
+                        baseAndLoading_OS_Base_Premium = osRNEData.FirstOrDefault()?.baseAndLoading_OS_Base_Premium,
+
+                        baseAndLoading_Unlimited_Restore = osRNEData.FirstOrDefault()?.baseAndLoading_Unlimited_Restore,
+                        baseAndLoading_Final_Base_Premium = osRNEData.FirstOrDefault()?.baseAndLoading_Final_Base_Premium,
+
+                        loading_prem_1 = osRNEData.FirstOrDefault()?.loading_prem_1,
+                        loading_prem_2 = osRNEData.FirstOrDefault()?.loading_prem_2,
+                        loading_prem_3 = osRNEData.FirstOrDefault()?.loading_prem_3,
+                        loading_prem_4 = osRNEData.FirstOrDefault()?.loading_prem_4,
+                        loading_prem_5 = osRNEData.FirstOrDefault()?.loading_prem_5,
+                        loading_prem_6 = osRNEData.FirstOrDefault()?.loading_prem_6,
+                        loading_prem_7 = osRNEData.FirstOrDefault()?.loading_prem_7,
+                        loading_prem_8 = osRNEData.FirstOrDefault()?.loading_prem_8,
+                        loading_prem_9 = osRNEData.FirstOrDefault()?.loading_prem_9,
+                        loading_prem_10 = osRNEData.FirstOrDefault()?.loading_prem_10,
+                        loading_prem_11 = osRNEData.FirstOrDefault()?.loading_prem_11,
+                        loading_prem_12 = osRNEData.FirstOrDefault()?.loading_prem_12,
+                        loading_prem = osRNEData.FirstOrDefault()?.loading_prem,
+
+                        hDCBaseAndLoading = osRNEData.FirstOrDefault()?.hDCBaseAndLoading,
+                        HDC_BaseCoverPremium = osRNEData.FirstOrDefault()?.HDC_BaseCoverPremium,
+                        HDC_LoyaltyDiscount = osRNEData.FirstOrDefault()?.HDC_LoyaltyDiscount,
+                        HDC_EmployeeDiscount = osRNEData.FirstOrDefault()?.HDC_EmployeeDiscount,
+                        HDC_OnlineDiscount = osRNEData.FirstOrDefault()?.HDC_OnlineDiscount,
+                        HDC_FamilyDiscount = osRNEData.FirstOrDefault()?.HDC_FamilyDiscount,
+                        HDC_CapppedDiscount = osRNEData.FirstOrDefault()?.HDC_CapppedDiscount,
+                        HDC_LongTermDiscount = osRNEData.FirstOrDefault()?.HDC_LongTermDiscount,
+
+                        CI_BaseAndLoading = osRNEData.FirstOrDefault()?.CI_BaseAndLoading,
+                        CI_BaseCoverPremium = osRNEData.FirstOrDefault()?.CI_BaseCoverPremium,
+                        CI_LoyaltyDiscount = osRNEData.FirstOrDefault()?.CI_LoyaltyDiscount,
+                        CI_EmployeeDiscount = osRNEData.FirstOrDefault()?.CI_EmployeeDiscount,
+                        CI_OnlineDiscount = osRNEData.FirstOrDefault()?.CI_OnlineDiscount,
+                        CI_FamilyDiscount = osRNEData.FirstOrDefault()?.CI_FamilyDiscount,
+                        CI_CapppedDiscount = osRNEData.FirstOrDefault()?.CI_CapppedDiscount,
+                        CI_LongTermDiscount = osRNEData.FirstOrDefault()?.CI_LongTermDiscount,
+
+                        cash_Benefit_A = osRNEData.FirstOrDefault()?.cash_Benefit_A,
+                        cash_Benefit_C = osRNEData.FirstOrDefault()?.cash_Benefit_C,
+                        cash_Benefit_Age_Band = osRNEData.FirstOrDefault()?.cash_Benefit_Age_Band,
+                        cash_Benefit_SI = osRNEData.FirstOrDefault()?.cash_Benefit_SI,
+                        cash_Benefit_Family_Defn = osRNEData.FirstOrDefault()?.cash_Benefit_Family_Defn,
+                        Cash_Benefit_Premium = osRNEData.FirstOrDefault()?.Cash_Benefit_Premium,
+                        cash_Benefit_insured_1 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_1,
+                        cash_Benefit_insured_2 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_2,
+                        cash_Benefit_insured_3 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_3,
+                        cash_Benefit_insured_4 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_4,
+                        cash_Benefit_insured_5 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_5,
+                        cash_Benefit_insured_6 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_6,
+                        cash_Benefit_insured_7 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_7,
+                        cash_Benefit_insured_8 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_8,
+                        cash_Benefit_insured_9 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_9,
+                        cash_Benefit_insured_10 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_10,
+                        cash_Benefit_insured_11 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_11,
+                        cash_Benefit_insured_12 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_12,
+                        cash_Benefit_Premium_Check = osRNEData.FirstOrDefault()?.cash_Benefit_Premium_Check,
+
+                        loading_insured_1 = osRNEData.FirstOrDefault()?.loading_insured_1,
+                        loading_insured_2 = osRNEData.FirstOrDefault()?.loading_insured_2,
+                        loading_insured_3 = osRNEData.FirstOrDefault()?.loading_insured_3,
+                        loading_insured_4 = osRNEData.FirstOrDefault()?.loading_insured_4,
+                        loading_insured_5 = osRNEData.FirstOrDefault()?.loading_insured_5,
+                        loading_insured_6 = osRNEData.FirstOrDefault()?.loading_insured_6,
+                        loading_insured_7 = osRNEData.FirstOrDefault()?.loading_insured_7,
+                        loading_insured_8 = osRNEData.FirstOrDefault()?.loading_insured_8,
+                        loading_insured_9 = osRNEData.FirstOrDefault()?.loading_insured_9,
+                        loading_insured_10 = osRNEData.FirstOrDefault()?.loading_insured_10,
+                        loading_insured_11 = osRNEData.FirstOrDefault()?.loading_insured_11,
+                        loading_insured_12 = osRNEData.FirstOrDefault()?.loading_insured_12,
+
+                        critical_Illness_AddOn_Premium = osRNEData.FirstOrDefault()?.critical_Illness_AddOn_Premium,
+                        critical_Illness_Add_On_Opt = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Opt,
+                        critical_Illness_Add_On_SI = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_SI,
+                        critical_Illness_Add_On_Premium1 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium1,
+                        critical_Illness_Add_On_Premium2 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium2,
+                        critical_Illness_Add_On_Premium3 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium3,
+                        critical_Illness_Add_On_Premium4 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium4,
+                        critical_Illness_Add_On_Premium5 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium5,
+                        critical_Illness_Add_On_Premium6 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium6,
+                        critical_Illness_Add_On_Premium7 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium7,
+                        critical_Illness_Add_On_Premium8 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium8,
+                        critical_Illness_Add_On_Premium9 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium9,
+                        critical_Illness_Add_On_Premium10 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium10,
+                        critical_Illness_Add_On_Premium11 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium11,
+                        critical_Illness_Add_On_Premium12 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium12,
+                        ci_Variant = osRNEData.FirstOrDefault()?.ci_Variant,
+
+                        cash_Benefit_Opt = osRNEData.FirstOrDefault()?.cash_Benefit_Opt,
+
+                        base_Loading_And_Discount_Final_BasePremium = osRNEData.FirstOrDefault()?.base_Loading_And_Discount_Final_BasePremium,
+                        base_Loading_And_Discount_Premium = osRNEData.FirstOrDefault()?.base_Loading_And_Discount_Premium,
+                        net_premium = osRNEData.FirstOrDefault()?.net_premium,
+
+                        num_tot_premium = osRNEData.FirstOrDefault()?.num_tot_premium.HasValue == true ?
+                                          (decimal?)Math.Round(osRNEData.FirstOrDefault().num_tot_premium.Value, 2)
+                                          : (decimal?)null,
+
+                        finalPremium = osRNEData.FirstOrDefault()?.finalPremium.HasValue == true ?
+                                          (decimal?)Math.Round(osRNEData.FirstOrDefault().finalPremium.Value, 2)
+                                          : (decimal?)null,
+                        GST = osRNEData.FirstOrDefault()?.GST.HasValue == true ?
+                                          (decimal?)Math.Round(osRNEData.FirstOrDefault().GST.Value, 2)
+                                          : (decimal?)null,
+
+                        //upsell premiums and sum insureds
+                        upsell_sum_insured1 = osRNEDataUpSell.FirstOrDefault()?.sum_insured1,
+                        upsell_sum_insured2 = osRNEDataUpSell.FirstOrDefault()?.sum_insured2,
+                        upsell_sum_insured3 = osRNEDataUpSell.FirstOrDefault()?.sum_insured3,
+                        upsell_sum_insured4 = osRNEDataUpSell.FirstOrDefault()?.sum_insured4,
+                        upsell_sum_insured5 = osRNEDataUpSell.FirstOrDefault()?.sum_insured5,
+                        upsell_sum_insured6 = osRNEDataUpSell.FirstOrDefault()?.sum_insured6,
+
+                        base_upsell_Premium1 = osRNEDataUpSell.FirstOrDefault()?.base_premium_1,
+                        base_upsell_Premium2 = osRNEDataUpSell.FirstOrDefault()?.base_premium_2,
+                        base_upsell_Premium3 = osRNEDataUpSell.FirstOrDefault()?.base_premium_3,
+                        base_upsell_Premium4 = osRNEDataUpSell.FirstOrDefault()?.base_premium_4,
+                        base_upsell_Premium5 = osRNEDataUpSell.FirstOrDefault()?.base_premium_5,
+                        base_upsell_Premium6 = osRNEDataUpSell.FirstOrDefault()?.base_premium_6,
+
+                        final_Premium_upsell = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell
+                    };
+                    decimal? crosscheck1 = osRNEDataUpSell.FirstOrDefault()?.baseprem_cross_Check;
+                    decimal? crosscheck2 = osRNEDataUpSell.FirstOrDefault()?.upsellbaseprem_cross_Check;
+                    decimal? netPremium = osRNEDataUpSell.FirstOrDefault()?.netPremium ?? 0;
+
+                    decimal? finalPremium = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell ??0;
+
+                    decimal? gst = osRNEDataUpSell.FirstOrDefault()?.GST ??0;
+
+                    if (objOptimaSecurePremiumValidationUpSell?.policy_number == null)
+                    {
+                        Console.WriteLine("Policy number not found.", policyNo);
+                    }
+                    string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
+                    using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
+                    {
+                        dbConnection.Open();
+                        var record_idst = dbConnection.QueryFirstOrDefault<premium_validation>(
+                            "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
+                            new { CertificateNo = policyNo });
+
+                        if (record_idst == null)
+                        {
+                            if (objOptimaSecurePremiumValidationUpSell.insured_cb1 == string.Empty && objOptimaSecurePremiumValidationUpSell.insured_cb1 == null)
+                            {
+                                Console.WriteLine($"Inserting data for Policy No: {policyNo}");
+                                var insertQuery = @"
+                                    INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status)
+                                    VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - No CB', 'CB SI cannot be zero')";
+
+                                dbConnection.Execute(insertQuery, new
+                                {
+                                    CertificateNo = policyNo,
+                                    VerifiedPrem = netPremium,
+                                    VerifiedGst = gst,
+                                    VerifiedTotalPrem = finalPremium
+                                });
+                                Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    await HandleCrosschecksAndUpdateStatus(policyNo, osRNEData.FirstOrDefault(), crosscheck1, crosscheck2, netPremium, finalPremium, gst);
+                                }
+                                catch (DbUpdateConcurrencyException ex)
+                                {
+                                    var entry = ex.Entries.Single();
+                                    await entry.ReloadAsync();
+                                }
+                                catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "40P01")
+                                {
+
+                                }
+
+                            }
+                        }
+
+                        if (objOptimaSecurePremiumValidationUpSell != null)
+                        {
+                            var no_of_members =osRNEDataUpSell.FirstOrDefault()?.no_of_members;
+                            var ridercount = 3;
+                            var policy_number = objOptimaSecurePremiumValidationUpSell.policy_number;
+                            var reference_number = objOptimaSecurePremiumValidationUpSell.reference_num;
+                            var newRecord = new List<rne_calculated_cover_rg>();
+                            for (int i = 1; i <= no_of_members; i++)
+                            {
+                                var sumInsured = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"sum_insured{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+                                var basePremium = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"basePremium{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+                                var sumInsuredupsell = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"upsell_sum_insured{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+                                var basePremiumupsell = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"base_upsell_Premium{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+                                var finalPremiumupsell = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"final_Premium_upsell")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+
+                                if (no_of_members > 1 && i >= 2 && i <= 6)
+                                {
+                                    basePremium *= 0.45m;
+                                    basePremiumupsell *= 0.45m;
+                                }
+                                var newRecord1 = new rne_calculated_cover_rg
+                                {
+                                    policy_number = policy_number,
+                                    referencenum = reference_number,
+                                    suminsured = sumInsured,
+                                    premium = basePremium,
+                                    riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
+                                    covername = "Basic Optima Secure Cover"
+                                };
+                                var newRecord2 = new rne_calculated_cover_rg
+                                {
+                                    isupsell = 1,
+                                    policy_number = policy_number,
+                                    referencenum = reference_number,
+                                    suminsured = sumInsuredupsell,
+                                    premium = basePremiumupsell,
+                                    totalpremium = finalPremiumupsell,//total premium column in rne_calculated_cover_rg will store the finalpremiumupsell from premium computation
+                                    riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
+                                    covername = "Upsell Cover"
+                                };
+                                newRecord.Add(newRecord1);
+                                newRecord.Add(newRecord2);
+                            }
+                            for (int j = 1; j <= ridercount; j++)
+                            {                              
+                                var riderPremium = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"critical_Illness_Add_On_PremiumList{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+                                var riderPremiumpr = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"cash_Benefit_insured_{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+                                var riderPremiumur = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"baseAndLoading_Unlimited_Restore")?.GetValue(objOptimaSecurePremiumValidationUpSell));
+
+                                if (riderPremium > 0)
+                                {
+                                    var riderRecord = new rne_calculated_cover_rg
+                                    {
+                                        policy_number = policy_number,
+                                        referencenum = reference_number,
+                                        //to print Critical Advantage rider
+                                        riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
+                                        premium = riderPremium,
+                                        covername = "my:health Critical illness Add on"
+                                    };
+                                    newRecord.Add(riderRecord);
+                                }
+                                if (riderPremiumpr > 0)
+                                {
+                                    var riderRecordpr = new rne_calculated_cover_rg
+                                    {
+                                        policy_number = policy_number,
+                                        referencenum = reference_number,                                      
+                                        riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
+                                        premium = riderPremiumpr,
+                                        covername = "my:health Hospital Cash Benefit Add On"
+                                    };
+                                    newRecord.Add(riderRecordpr);
+                                }                               
+                                if (riderPremiumur > 0)
+                                {
+                                    var riderRecordur = new rne_calculated_cover_rg
+                                    {
+                                        policy_number = policy_number,
+                                        referencenum = reference_number,                                      
+                                        riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
+                                        premium = riderPremiumur,
+                                        covername = "Unlimited Restore"
+                                    };
+                                    newRecord.Add(riderRecordur);
+                                }
+                            }
+                               var insertQuery = @"
+                                INSERT INTO ins.rne_calculated_cover_rg (policy_number, referencenum, suminsured, premium, totalpremium, riskname, covername, isupsell)
+                                VALUES (@policy_number, @referencenum, @suminsured, @premium, @totalpremium, @riskname, @covername, @isupsell);
+                                ";
+
+                            await dbConnection.ExecuteAsync(insertQuery, newRecord).ConfigureAwait(false);
+                        }
+
+
+                    }
                         break;
                     }
                 }
-            }
-            //Combine the result sets and send it in the response.
-            //Note: To compute with base SI Premiums for Insureds.
-            OptimaSecurePremiumValidationUpsell objOptimaSecurePremiumValidationUpSell = new OptimaSecurePremiumValidationUpsell
-            {
-                policy_number = osRNEData.FirstOrDefault()?.policy_number,
-                reference_num = osRNEData.FirstOrDefault()?.reference_num,
-                prod_code = osRNEData.FirstOrDefault()?.prod_code,
-                prod_name = osRNEData.FirstOrDefault()?.prod_name,
-                batchid = osRNEData.FirstOrDefault()?.batchid,
-                customer_id = osRNEData.FirstOrDefault()?.customer_id,
-                customername = osRNEData.FirstOrDefault()?.customername,
-                policy_start_date = osRNEData.FirstOrDefault()?.policy_start_date,
-                policy_expiry_date = osRNEData.FirstOrDefault()?.policy_expiry_date,
-                txt_salutation = osRNEData.FirstOrDefault()?.txt_salutation,
-                location_code = osRNEData.FirstOrDefault()?.location_code,
-                txt_apartment = osRNEData.FirstOrDefault()?.txt_apartment,
-                txt_street = osRNEData.FirstOrDefault()?.txt_street,
-                txt_areavillage = osRNEData.FirstOrDefault()?.txt_areavillage,
-                txt_citydistrict = osRNEData.FirstOrDefault()?.txt_citydistrict,
-                txt_state = osRNEData.FirstOrDefault()?.txt_state,
-                state_code = osRNEData.FirstOrDefault()?.state_code,
-                state_regis = osRNEData.FirstOrDefault()?.state_regis,
-                txt_pincode = osRNEData.FirstOrDefault()?.txt_pincode,
-                txt_nationality = osRNEData.FirstOrDefault()?.txt_nationality,
-                split_flag = osRNEData.FirstOrDefault()?.split_flag,
-                txt_family = osRNEData.FirstOrDefault()?.txt_family,
-                policyplan = osRNEData.FirstOrDefault()?.policyplan,
-                policy_type = osRNEData.FirstOrDefault()?.policy_type,
-                policy_period = osRNEData.FirstOrDefault()?.policy_period,
-                verticalname = osRNEData.FirstOrDefault()?.verticalname,
-                vertical_name = osRNEData.FirstOrDefault()?.vertical_name,
-                no_of_members = osRNEData.FirstOrDefault()?.no_of_members,
-                eldest_member = osRNEData.FirstOrDefault()?.eldest_member,
-
-                optima_secure_gst = osRNEData.FirstOrDefault()?.optima_secure_gst.HasValue == true
-    ? (decimal?)Math.Round(osRNEData.FirstOrDefault().optima_secure_gst.Value, 2)
-    : (decimal?)null,
-
-                upselltype1 = osRNEDataUpSell.FirstOrDefault()?.upselltype1,
-                upselltype2 = osRNEDataUpSell.FirstOrDefault()?.upselltype2,
-                upselltype3 = osRNEDataUpSell.FirstOrDefault()?.upselltype3,
-                upselltype4 = osRNEDataUpSell.FirstOrDefault()?.upselltype4,
-                upselltype5 = osRNEDataUpSell.FirstOrDefault()?.upselltype5,
-
-                upsellvalue1 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue1,
-                upsellvalue2 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue2,
-                upsellvalue3 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue3,
-                upsellvalue4 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue4,
-                upsellvalue5 = osRNEDataUpSell.FirstOrDefault()?.upsellvalue5,
-
-                upsellpremium1 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium1,
-                upsellpremium2 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium2,
-                upsellpremium3 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium3,
-                upsellpremium4 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium4,
-                upsellpremium5 = osRNEDataUpSell.FirstOrDefault()?.upsellpremium5,
-
-                insured_loadingper1 = osRNEData.FirstOrDefault()?.insured_loadingper1,
-                insured_loadingper2 = osRNEData.FirstOrDefault()?.insured_loadingper2,
-                insured_loadingper3 = osRNEData.FirstOrDefault()?.insured_loadingper3,
-                insured_loadingper4 = osRNEData.FirstOrDefault()?.insured_loadingper4,
-                insured_loadingper5 = osRNEData.FirstOrDefault()?.insured_loadingper5,
-                insured_loadingper6 = osRNEData.FirstOrDefault()?.insured_loadingper6,
-                insured_loadingper7 = osRNEData.FirstOrDefault()?.insured_loadingper7,
-                insured_loadingper8 = osRNEData.FirstOrDefault()?.insured_loadingper8,
-                insured_loadingper9 = osRNEData.FirstOrDefault()?.insured_loadingper9,
-                insured_loadingper10 = osRNEData.FirstOrDefault()?.insured_loadingper10,
-                insured_loadingper11 = osRNEData.FirstOrDefault()?.insured_loadingper11,
-                insured_loadingper12 = osRNEData.FirstOrDefault()?.insured_loadingper12,
-
-                txt_insuredname1 = osRNEData.FirstOrDefault()?.txt_insuredname1,
-                txt_insuredname2 = osRNEData.FirstOrDefault()?.txt_insuredname2,
-                txt_insuredname3 = osRNEData.FirstOrDefault()?.txt_insuredname3,
-                txt_insuredname4 = osRNEData.FirstOrDefault()?.txt_insuredname4,
-                txt_insuredname5 = osRNEData.FirstOrDefault()?.txt_insuredname5,
-                txt_insuredname6 = osRNEData.FirstOrDefault()?.txt_insuredname6,
-                txt_insuredname7 = osRNEData.FirstOrDefault()?.txt_insuredname7,
-                txt_insuredname8 = osRNEData.FirstOrDefault()?.txt_insuredname8,
-                txt_insuredname9 = osRNEData.FirstOrDefault()?.txt_insuredname9,
-                txt_insuredname10 = osRNEData.FirstOrDefault()?.txt_insuredname10,
-                txt_insuredname11 = osRNEData.FirstOrDefault()?.txt_insuredname11,
-                txt_insuredname12 = osRNEData.FirstOrDefault()?.txt_insuredname12,
-
-                txt_insured_entrydate1 = osRNEData.FirstOrDefault()?.txt_insured_entrydate1,
-                txt_insured_entrydate2 = osRNEData.FirstOrDefault()?.txt_insured_entrydate2,
-                txt_insured_entrydate3 = osRNEData.FirstOrDefault()?.txt_insured_entrydate3,
-                txt_insured_entrydate4 = osRNEData.FirstOrDefault()?.txt_insured_entrydate4,
-                txt_insured_entrydate5 = osRNEData.FirstOrDefault()?.txt_insured_entrydate5,
-                txt_insured_entrydate6 = osRNEData.FirstOrDefault()?.txt_insured_entrydate6,
-                txt_insured_entrydate7 = osRNEData.FirstOrDefault()?.txt_insured_entrydate7,
-                txt_insured_entrydate8 = osRNEData.FirstOrDefault()?.txt_insured_entrydate8,
-                txt_insured_entrydate9 = osRNEData.FirstOrDefault()?.txt_insured_entrydate9,
-                txt_insured_entrydate10 = osRNEData.FirstOrDefault()?.txt_insured_entrydate10,
-                txt_insured_entrydate11 = osRNEData.FirstOrDefault()?.txt_insured_entrydate11,
-                txt_insured_entrydate12 = osRNEData.FirstOrDefault()?.txt_insured_entrydate12,
-
-                member_id1 = osRNEData.FirstOrDefault()?.member_id1,
-                member_id2 = osRNEData.FirstOrDefault()?.member_id2,
-                member_id3 = osRNEData.FirstOrDefault()?.member_id3,
-                member_id4 = osRNEData.FirstOrDefault()?.member_id4,
-                member_id5 = osRNEData.FirstOrDefault()?.member_id5,
-                member_id6 = osRNEData.FirstOrDefault()?.member_id6,
-                member_id7 = osRNEData.FirstOrDefault()?.member_id7,
-                member_id8 = osRNEData.FirstOrDefault()?.member_id8,
-                member_id9 = osRNEData.FirstOrDefault()?.member_id9,
-                member_id10 = osRNEData.FirstOrDefault()?.member_id10,
-                member_id11 = osRNEData.FirstOrDefault()?.member_id11,
-                member_id12 = osRNEData.FirstOrDefault()?.member_id12,
-
-                insured_loadingamt1 = osRNEData.FirstOrDefault()?.insured_loadingamt1,
-                insured_loadingamt2 = osRNEData.FirstOrDefault()?.insured_loadingamt2,
-                insured_loadingamt3 = osRNEData.FirstOrDefault()?.insured_loadingamt3,
-                insured_loadingamt4 = osRNEData.FirstOrDefault()?.insured_loadingamt4,
-                insured_loadingamt5 = osRNEData.FirstOrDefault()?.insured_loadingamt5,
-                insured_loadingamt6 = osRNEData.FirstOrDefault()?.insured_loadingamt6,
-                insured_loadingamt7 = osRNEData.FirstOrDefault()?.insured_loadingamt7,
-                insured_loadingamt8 = osRNEData.FirstOrDefault()?.insured_loadingamt8,
-                insured_loadingamt9 = osRNEData.FirstOrDefault()?.insured_loadingamt9,
-                insured_loadingamt10 = osRNEData.FirstOrDefault()?.insured_loadingamt10,
-                insured_loadingamt11 = osRNEData.FirstOrDefault()?.insured_loadingamt11,
-                insured_loadingamt12 = osRNEData.FirstOrDefault()?.insured_loadingamt12,
-
-                txt_insured_dob1 = osRNEData.FirstOrDefault()?.txt_insured_dob1,
-                txt_insured_dob2 = osRNEData.FirstOrDefault()?.txt_insured_dob2,
-                txt_insured_dob3 = osRNEData.FirstOrDefault()?.txt_insured_dob3,
-                txt_insured_dob4 = osRNEData.FirstOrDefault()?.txt_insured_dob4,
-                txt_insured_dob5 = osRNEData.FirstOrDefault()?.txt_insured_dob5,
-                txt_insured_dob6 = osRNEData.FirstOrDefault()?.txt_insured_dob6,
-                txt_insured_dob7 = osRNEData.FirstOrDefault()?.txt_insured_dob7,
-                txt_insured_dob8 = osRNEData.FirstOrDefault()?.txt_insured_dob8,
-                txt_insured_dob9 = osRNEData.FirstOrDefault()?.txt_insured_dob9,
-                txt_insured_dob10 = osRNEData.FirstOrDefault()?.txt_insured_dob10,
-                txt_insured_dob11 = osRNEData.FirstOrDefault()?.txt_insured_dob11,
-                txt_insured_dob12 = osRNEData.FirstOrDefault()?.txt_insured_dob12,
-
-                txt_insured_age1 = osRNEData.FirstOrDefault()?.txt_insured_age1,
-                txt_insured_age2 = osRNEData.FirstOrDefault()?.txt_insured_age2,
-                txt_insured_age3 = osRNEData.FirstOrDefault()?.txt_insured_age3,
-                txt_insured_age4 = osRNEData.FirstOrDefault()?.txt_insured_age4,
-                txt_insured_age5 = osRNEData.FirstOrDefault()?.txt_insured_age5,
-                txt_insured_age6 = osRNEData.FirstOrDefault()?.txt_insured_age6,
-                txt_insured_age7 = osRNEData.FirstOrDefault()?.txt_insured_age7,
-                txt_insured_age8 = osRNEData.FirstOrDefault()?.txt_insured_age8,
-                txt_insured_age9 = osRNEData.FirstOrDefault()?.txt_insured_age9,
-                txt_insured_age10 = osRNEData.FirstOrDefault()?.txt_insured_age10,
-                txt_insured_age11 = osRNEData.FirstOrDefault()?.txt_insured_age11,
-                txt_insured_age12 = osRNEData.FirstOrDefault()?.txt_insured_age12,
-
-                txt_insured_relation1 = osRNEData.FirstOrDefault()?.txt_insured_relation1,
-                txt_insured_relation2 = osRNEData.FirstOrDefault()?.txt_insured_relation2,
-                txt_insured_relation3 = osRNEData.FirstOrDefault()?.txt_insured_relation3,
-                txt_insured_relation4 = osRNEData.FirstOrDefault()?.txt_insured_relation4,
-                txt_insured_relation5 = osRNEData.FirstOrDefault()?.txt_insured_relation5,
-                txt_insured_relation6 = osRNEData.FirstOrDefault()?.txt_insured_relation6,
-                txt_insured_relation7 = osRNEData.FirstOrDefault()?.txt_insured_relation7,
-                txt_insured_relation8 = osRNEData.FirstOrDefault()?.txt_insured_relation8,
-                txt_insured_relation9 = osRNEData.FirstOrDefault()?.txt_insured_relation9,
-                txt_insured_relation10 = osRNEData.FirstOrDefault()?.txt_insured_relation10,
-                txt_insured_relation11 = osRNEData.FirstOrDefault()?.txt_insured_relation11,
-                txt_insured_relation12 = osRNEData.FirstOrDefault()?.txt_insured_relation12,
-
-                insured_relation_tag_1 = osRNEData.FirstOrDefault()?.insured_relation_tag_1,
-                insured_relation_tag_2 = osRNEData.FirstOrDefault()?.insured_relation_tag_2,
-                insured_relation_tag_3 = osRNEData.FirstOrDefault()?.insured_relation_tag_3,
-                insured_relation_tag_4 = osRNEData.FirstOrDefault()?.insured_relation_tag_4,
-                insured_relation_tag_5 = osRNEData.FirstOrDefault()?.insured_relation_tag_5,
-                insured_relation_tag_6 = osRNEData.FirstOrDefault()?.insured_relation_tag_6,
-                insured_relation_tag_7 = osRNEData.FirstOrDefault()?.insured_relation_tag_7,
-                insured_relation_tag_8 = osRNEData.FirstOrDefault()?.insured_relation_tag_8,
-                insured_relation_tag_9 = osRNEData.FirstOrDefault()?.insured_relation_tag_9,
-                insured_relation_tag_10 = osRNEData.FirstOrDefault()?.insured_relation_tag_10,
-                insured_relation_tag_11 = osRNEData.FirstOrDefault()?.insured_relation_tag_11,
-                insured_relation_tag_12 = osRNEData.FirstOrDefault()?.insured_relation_tag_12,
-
-                pre_existing_disease1 = osRNEData.FirstOrDefault()?.pre_existing_disease1,
-                pre_existing_disease2 = osRNEData.FirstOrDefault()?.pre_existing_disease2,
-                pre_existing_disease3 = osRNEData.FirstOrDefault()?.pre_existing_disease3,
-                pre_existing_disease4 = osRNEData.FirstOrDefault()?.pre_existing_disease4,
-                pre_existing_disease5 = osRNEData.FirstOrDefault()?.pre_existing_disease5,
-                pre_existing_disease6 = osRNEData.FirstOrDefault()?.pre_existing_disease6,
-                pre_existing_disease7 = osRNEData.FirstOrDefault()?.pre_existing_disease7,
-                pre_existing_disease8 = osRNEData.FirstOrDefault()?.pre_existing_disease8,
-                pre_existing_disease9 = osRNEData.FirstOrDefault()?.pre_existing_disease9,
-                pre_existing_disease10 = osRNEData.FirstOrDefault()?.pre_existing_disease10,
-                pre_existing_disease11 = osRNEData.FirstOrDefault()?.pre_existing_disease11,
-                pre_existing_disease12 = osRNEData.FirstOrDefault()?.pre_existing_disease12,
-
-                insured_cb1 = osRNEData.FirstOrDefault()?.insured_cb1,
-                insured_cb2 = osRNEData.FirstOrDefault()?.insured_cb2,
-                insured_cb3 = osRNEData.FirstOrDefault()?.insured_cb3,
-                insured_cb4 = osRNEData.FirstOrDefault()?.insured_cb4,
-                insured_cb5 = osRNEData.FirstOrDefault()?.insured_cb5,
-                insured_cb6 = osRNEData.FirstOrDefault()?.insured_cb6,
-                insured_cb7 = osRNEData.FirstOrDefault()?.insured_cb7,
-                insured_cb8 = osRNEData.FirstOrDefault()?.insured_cb8,
-                insured_cb9 = osRNEData.FirstOrDefault()?.insured_cb9,
-                insured_cb10 = osRNEData.FirstOrDefault()?.insured_cb10,
-                insured_cb11 = osRNEData.FirstOrDefault()?.insured_cb11,
-                insured_cb12 = osRNEData.FirstOrDefault()?.insured_cb12,
-
-                sum_insured1 = osRNEData.FirstOrDefault()?.sum_insured1,
-                sum_insured2 = osRNEData.FirstOrDefault()?.sum_insured2,
-                sum_insured3 = osRNEData.FirstOrDefault()?.sum_insured3,
-                sum_insured4 = osRNEData.FirstOrDefault()?.sum_insured4,
-                sum_insured5 = osRNEData.FirstOrDefault()?.sum_insured5,
-                sum_insured6 = osRNEData.FirstOrDefault()?.sum_insured6,
-                sum_insured7 = osRNEData.FirstOrDefault()?.sum_insured7,
-                sum_insured8 = osRNEData.FirstOrDefault()?.sum_insured8,
-                sum_insured9 = osRNEData.FirstOrDefault()?.sum_insured9,
-                sum_insured10 = osRNEData.FirstOrDefault()?.sum_insured10,
-                sum_insured11 = osRNEData.FirstOrDefault()?.sum_insured11,
-                sum_insured12 = osRNEData.FirstOrDefault()?.sum_insured12,
-
-                insured_deductable1 = osRNEData.FirstOrDefault()?.insured_deductable1,
-                insured_deductable2 = osRNEData.FirstOrDefault()?.insured_deductable2,
-                insured_deductable3 = osRNEData.FirstOrDefault()?.insured_deductable3,
-                insured_deductable4 = osRNEData.FirstOrDefault()?.insured_deductable4,
-                insured_deductable5 = osRNEData.FirstOrDefault()?.insured_deductable5,
-                insured_deductable6 = osRNEData.FirstOrDefault()?.insured_deductable6,
-                insured_deductable7 = osRNEData.FirstOrDefault()?.insured_deductable7,
-                insured_deductable8 = osRNEData.FirstOrDefault()?.insured_deductable8,
-                insured_deductable9 = osRNEData.FirstOrDefault()?.insured_deductable9,
-                insured_deductable10 = osRNEData.FirstOrDefault()?.insured_deductable10,
-                insured_deductable11 = osRNEData.FirstOrDefault()?.insured_deductable11,
-                insured_deductable12 = osRNEData.FirstOrDefault()?.insured_deductable12,
-
-                wellness_discount1 = osRNEData.FirstOrDefault()?.wellness_discount1,
-                wellness_discount2 = osRNEData.FirstOrDefault()?.wellness_discount2,
-                wellness_discount3 = osRNEData.FirstOrDefault()?.wellness_discount3,
-                wellness_discount4 = osRNEData.FirstOrDefault()?.wellness_discount4,
-                wellness_discount5 = osRNEData.FirstOrDefault()?.wellness_discount5,
-                wellness_discount6 = osRNEData.FirstOrDefault()?.wellness_discount6,
-                wellness_discount7 = osRNEData.FirstOrDefault()?.wellness_discount7,
-                wellness_discount8 = osRNEData.FirstOrDefault()?.wellness_discount8,
-                wellness_discount9 = osRNEData.FirstOrDefault()?.wellness_discount9,
-                wellness_discount10 = osRNEData.FirstOrDefault()?.wellness_discount10,
-                wellness_discount11 = osRNEData.FirstOrDefault()?.wellness_discount11,
-                wellness_discount12 = osRNEData.FirstOrDefault()?.wellness_discount12,
-
-                stayactive1 = osRNEData.FirstOrDefault()?.stayactive1,
-                stayactive2 = osRNEData.FirstOrDefault()?.stayactive2,
-                stayactive3 = osRNEData.FirstOrDefault()?.stayactive3,
-                stayactive4 = osRNEData.FirstOrDefault()?.stayactive4,
-                stayactive5 = osRNEData.FirstOrDefault()?.stayactive5,
-                stayactive6 = osRNEData.FirstOrDefault()?.stayactive6,
-                stayactive7 = osRNEData.FirstOrDefault()?.stayactive7,
-                stayactive8 = osRNEData.FirstOrDefault()?.stayactive8,
-                stayactive9 = osRNEData.FirstOrDefault()?.stayactive9,
-                stayactive10 = osRNEData.FirstOrDefault()?.stayactive10,
-                stayactive11 = osRNEData.FirstOrDefault()?.stayactive11,
-                stayactive12 = osRNEData.FirstOrDefault()?.stayactive12,
-
-                coverbaseloadingrate1 = osRNEData.FirstOrDefault()?.coverbaseloadingrate1,
-                coverbaseloadingrate2 = osRNEData.FirstOrDefault()?.coverbaseloadingrate2,
-                coverbaseloadingrate3 = osRNEData.FirstOrDefault()?.coverbaseloadingrate3,
-                coverbaseloadingrate4 = osRNEData.FirstOrDefault()?.coverbaseloadingrate4,
-                coverbaseloadingrate5 = osRNEData.FirstOrDefault()?.coverbaseloadingrate5,
-                coverbaseloadingrate6 = osRNEData.FirstOrDefault()?.coverbaseloadingrate6,
-                coverbaseloadingrate7 = osRNEData.FirstOrDefault()?.coverbaseloadingrate7,
-                coverbaseloadingrate8 = osRNEData.FirstOrDefault()?.coverbaseloadingrate8,
-                coverbaseloadingrate9 = osRNEData.FirstOrDefault()?.coverbaseloadingrate9,
-                coverbaseloadingrate10 = osRNEData.FirstOrDefault()?.coverbaseloadingrate10,
-                coverbaseloadingrate11 = osRNEData.FirstOrDefault()?.coverbaseloadingrate11,
-                coverbaseloadingrate12 = osRNEData.FirstOrDefault()?.coverbaseloadingrate12,
-
-                health_incentive1 = osRNEData.FirstOrDefault()?.health_incentive1,
-                health_incentive2 = osRNEData.FirstOrDefault()?.health_incentive2,
-                health_incentive3 = osRNEData.FirstOrDefault()?.health_incentive3,
-                health_incentive4 = osRNEData.FirstOrDefault()?.health_incentive4,
-                health_incentive5 = osRNEData.FirstOrDefault()?.health_incentive5,
-                health_incentive6 = osRNEData.FirstOrDefault()?.health_incentive6,
-                health_incentive7 = osRNEData.FirstOrDefault()?.health_incentive7,
-                health_incentive8 = osRNEData.FirstOrDefault()?.health_incentive8,
-                health_incentive9 = osRNEData.FirstOrDefault()?.health_incentive9,
-                health_incentive10 = osRNEData.FirstOrDefault()?.health_incentive10,
-                health_incentive11 = osRNEData.FirstOrDefault()?.health_incentive11,
-                health_incentive12 = osRNEData.FirstOrDefault()?.health_incentive12,
-
-                fitness_discount1 = osRNEData.FirstOrDefault()?.fitness_discount1,
-                fitness_discount2 = osRNEData.FirstOrDefault()?.fitness_discount2,
-                fitness_discount3 = osRNEData.FirstOrDefault()?.fitness_discount3,
-                fitness_discount4 = osRNEData.FirstOrDefault()?.fitness_discount4,
-                fitness_discount5 = osRNEData.FirstOrDefault()?.fitness_discount5,
-                fitness_discount6 = osRNEData.FirstOrDefault()?.fitness_discount6,
-                fitness_discount7 = osRNEData.FirstOrDefault()?.fitness_discount7,
-                fitness_discount8 = osRNEData.FirstOrDefault()?.fitness_discount8,
-                fitness_discount9 = osRNEData.FirstOrDefault()?.fitness_discount9,
-                fitness_discount10 = osRNEData.FirstOrDefault()?.fitness_discount10,
-                fitness_discount11 = osRNEData.FirstOrDefault()?.fitness_discount11,
-                fitness_discount12 = osRNEData.FirstOrDefault()?.fitness_discount12,
-
-                reservbenefis1 = osRNEData.FirstOrDefault()?.reservbenefis1,
-                reservbenefis2 = osRNEData.FirstOrDefault()?.reservbenefis2,
-                reservbenefis3 = osRNEData.FirstOrDefault()?.reservbenefis3,
-                reservbenefis4 = osRNEData.FirstOrDefault()?.reservbenefis4,
-                reservbenefis5 = osRNEData.FirstOrDefault()?.reservbenefis5,
-                reservbenefis6 = osRNEData.FirstOrDefault()?.reservbenefis6,
-                reservbenefis7 = osRNEData.FirstOrDefault()?.reservbenefis7,
-                reservbenefis8 = osRNEData.FirstOrDefault()?.reservbenefis8,
-                reservbenefis9 = osRNEData.FirstOrDefault()?.reservbenefis9,
-                reservbenefis10 = osRNEData.FirstOrDefault()?.reservbenefis10,
-                reservbenefis11 = osRNEData.FirstOrDefault()?.reservbenefis11,
-                reservbenefis12 = osRNEData.FirstOrDefault()?.reservbenefis12,
-
-                insured_rb_claimamt1 = osRNEData.FirstOrDefault()?.insured_rb_claimamt1,
-                insured_rb_claimamt2 = osRNEData.FirstOrDefault()?.insured_rb_claimamt2,
-                insured_rb_claimamt3 = osRNEData.FirstOrDefault()?.insured_rb_claimamt3,
-                insured_rb_claimamt4 = osRNEData.FirstOrDefault()?.insured_rb_claimamt4,
-                insured_rb_claimamt5 = osRNEData.FirstOrDefault()?.insured_rb_claimamt5,
-                insured_rb_claimamt6 = osRNEData.FirstOrDefault()?.insured_rb_claimamt6,
-                insured_rb_claimamt7 = osRNEData.FirstOrDefault()?.insured_rb_claimamt7,
-                insured_rb_claimamt8 = osRNEData.FirstOrDefault()?.insured_rb_claimamt8,
-                insured_rb_claimamt9 = osRNEData.FirstOrDefault()?.insured_rb_claimamt9,
-                insured_rb_claimamt10 = osRNEData.FirstOrDefault()?.insured_rb_claimamt10,
-                insured_rb_claimamt11 = osRNEData.FirstOrDefault()?.insured_rb_claimamt11,
-                insured_rb_claimamt12 = osRNEData.FirstOrDefault()?.insured_rb_claimamt12,
-
-                combi_discount = osRNEData.FirstOrDefault()?.combi_discount,
-                employee_discount = osRNEData.FirstOrDefault()?.employee_discount,
-                online_discount = osRNEData.FirstOrDefault()?.online_discount,
-                loyalty_discount = osRNEData.FirstOrDefault()?.loyalty_discount,
-                tenure_discount = osRNEData.FirstOrDefault()?.tenure_discount,
-                loading_premium = osRNEData.FirstOrDefault()?.loading_premium,
-                family_discount = osRNEData.FirstOrDefault()?.family_discount,
-                dedcutable_discount = osRNEData.FirstOrDefault()?.dedcutable_discount,
-
-                base_premium_1 = osRNEData.FirstOrDefault()?.base_premium_1,
-                base_premium_2 = osRNEData.FirstOrDefault()?.base_premium_2,
-                base_premium_3 = osRNEData.FirstOrDefault()?.base_premium_3,
-                base_premium_4 = osRNEData.FirstOrDefault()?.base_premium_4,
-                base_premium_5 = osRNEData.FirstOrDefault()?.base_premium_5,
-                base_premium_6 = osRNEData.FirstOrDefault()?.base_premium_6,
-                base_premium_7 = osRNEData.FirstOrDefault()?.base_premium_7,
-                base_premium_8 = osRNEData.FirstOrDefault()?.base_premium_8,
-                base_premium_9 = osRNEData.FirstOrDefault()?.base_premium_9,
-                base_premium_10 = osRNEData.FirstOrDefault()?.base_premium_10,
-                base_premium_11 = osRNEData.FirstOrDefault()?.base_premium_11,
-                base_premium_12 = osRNEData.FirstOrDefault()?.base_premium_12,
-                base_premium = osRNEData.FirstOrDefault()?.base_premium,
-                base_premium_after_deductible = osRNEData.FirstOrDefault()?.base_premium_after_deductible,
-
-                loading_prem1 = osRNEData.FirstOrDefault()?.loading_prem1,
-                loading_prem2 = osRNEData.FirstOrDefault()?.loading_prem2,
-                loading_prem3 = osRNEData.FirstOrDefault()?.loading_prem3,
-                loading_prem4 = osRNEData.FirstOrDefault()?.loading_prem4,
-                loading_prem5 = osRNEData.FirstOrDefault()?.loading_prem5,
-                loading_prem6 = osRNEData.FirstOrDefault()?.loading_prem6,
-                loading_prem7 = osRNEData.FirstOrDefault()?.loading_prem7,
-                loading_prem8 = osRNEData.FirstOrDefault()?.loading_prem8,
-                loading_prem9 = osRNEData.FirstOrDefault()?.loading_prem9,
-                loading_prem10 = osRNEData.FirstOrDefault()?.loading_prem10,
-                loading_prem11 = osRNEData.FirstOrDefault()?.loading_prem11,
-                loading_prem12 = osRNEData.FirstOrDefault()?.loading_prem12,
-                loading_prem_total = osRNEData.FirstOrDefault()?.loading_prem_total,
-
-                cash_benefit_loading_prem_1 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_1,
-                cash_benefit_loading_prem_2 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_2,
-                cash_benefit_loading_prem_3 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_3,
-                cash_benefit_loading_prem_4 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_4,
-                cash_benefit_loading_prem_5 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_5,
-                cash_benefit_loading_prem_6 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_6,
-                cash_benefit_loading_prem_7 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_7,
-                cash_benefit_loading_prem_8 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_8,
-                cash_benefit_loading_prem_9 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_9,
-                cash_benefit_loading_prem_10 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_10,
-                cash_benefit_loading_prem_11 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_11,
-                cash_benefit_loading_prem_12 = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_12,
-                cash_benefit_loading_prem_total = osRNEData.FirstOrDefault()?.cash_benefit_loading_prem_total,
-
-                baseAndLoading = osRNEData.FirstOrDefault()?.baseAndLoading,
-                baseAndLoading_LoyaltyDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_LoyaltyDiscount,
-                baseAndLoading_EmployeeDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_EmployeeDiscount,
-                baseAndLoading_OnlineDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_OnlineDiscount,
-                baseAndLoading_CombiDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_CombiDiscount,
-                baseAndLoading_CapppedDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_CapppedDiscount,
-                baseAndLoading_LongTermDiscount = osRNEData.FirstOrDefault()?.baseAndLoading_LongTermDiscount,
-                baseAndLoading_OS_Base_Premium = osRNEData.FirstOrDefault()?.baseAndLoading_OS_Base_Premium,
-
-                baseAndLoading_Unlimited_Restore = osRNEData.FirstOrDefault()?.baseAndLoading_Unlimited_Restore,
-                baseAndLoading_Final_Base_Premium = osRNEData.FirstOrDefault()?.baseAndLoading_Final_Base_Premium,
-
-                loading_prem_1 = osRNEData.FirstOrDefault()?.loading_prem_1,
-                loading_prem_2 = osRNEData.FirstOrDefault()?.loading_prem_2,
-                loading_prem_3 = osRNEData.FirstOrDefault()?.loading_prem_3,
-                loading_prem_4 = osRNEData.FirstOrDefault()?.loading_prem_4,
-                loading_prem_5 = osRNEData.FirstOrDefault()?.loading_prem_5,
-                loading_prem_6 = osRNEData.FirstOrDefault()?.loading_prem_6,
-                loading_prem_7 = osRNEData.FirstOrDefault()?.loading_prem_7,
-                loading_prem_8 = osRNEData.FirstOrDefault()?.loading_prem_8,
-                loading_prem_9 = osRNEData.FirstOrDefault()?.loading_prem_9,
-                loading_prem_10 = osRNEData.FirstOrDefault()?.loading_prem_10,
-                loading_prem_11 = osRNEData.FirstOrDefault()?.loading_prem_11,
-                loading_prem_12 = osRNEData.FirstOrDefault()?.loading_prem_12,
-                loading_prem = osRNEData.FirstOrDefault()?.loading_prem,
-
-                hDCBaseAndLoading = osRNEData.FirstOrDefault()?.hDCBaseAndLoading,
-                HDC_BaseCoverPremium = osRNEData.FirstOrDefault()?.HDC_BaseCoverPremium,
-                HDC_LoyaltyDiscount = osRNEData.FirstOrDefault()?.HDC_LoyaltyDiscount,
-                HDC_EmployeeDiscount = osRNEData.FirstOrDefault()?.HDC_EmployeeDiscount,
-                HDC_OnlineDiscount = osRNEData.FirstOrDefault()?.HDC_OnlineDiscount,
-                HDC_FamilyDiscount = osRNEData.FirstOrDefault()?.HDC_FamilyDiscount,
-                HDC_CapppedDiscount = osRNEData.FirstOrDefault()?.HDC_CapppedDiscount,
-                HDC_LongTermDiscount = osRNEData.FirstOrDefault()?.HDC_LongTermDiscount,
-
-                CI_BaseAndLoading = osRNEData.FirstOrDefault()?.CI_BaseAndLoading,
-                CI_BaseCoverPremium = osRNEData.FirstOrDefault()?.CI_BaseCoverPremium,
-                CI_LoyaltyDiscount = osRNEData.FirstOrDefault()?.CI_LoyaltyDiscount,
-                CI_EmployeeDiscount = osRNEData.FirstOrDefault()?.CI_EmployeeDiscount,
-                CI_OnlineDiscount = osRNEData.FirstOrDefault()?.CI_OnlineDiscount,
-                CI_FamilyDiscount = osRNEData.FirstOrDefault()?.CI_FamilyDiscount,
-                CI_CapppedDiscount = osRNEData.FirstOrDefault()?.CI_CapppedDiscount,
-                CI_LongTermDiscount = osRNEData.FirstOrDefault()?.CI_LongTermDiscount,
-
-                cash_Benefit_A = osRNEData.FirstOrDefault()?.cash_Benefit_A,
-                cash_Benefit_C = osRNEData.FirstOrDefault()?.cash_Benefit_C,
-                cash_Benefit_Age_Band = osRNEData.FirstOrDefault()?.cash_Benefit_Age_Band,
-                cash_Benefit_SI = osRNEData.FirstOrDefault()?.cash_Benefit_SI,
-                cash_Benefit_Family_Defn = osRNEData.FirstOrDefault()?.cash_Benefit_Family_Defn,
-                Cash_Benefit_Premium = osRNEData.FirstOrDefault()?.Cash_Benefit_Premium,
-                cash_Benefit_insured_1 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_1,
-                cash_Benefit_insured_2 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_2,
-                cash_Benefit_insured_3 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_3,
-                cash_Benefit_insured_4 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_4,
-                cash_Benefit_insured_5 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_5,
-                cash_Benefit_insured_6 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_6,
-                cash_Benefit_insured_7 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_7,
-                cash_Benefit_insured_8 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_8,
-                cash_Benefit_insured_9 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_9,
-                cash_Benefit_insured_10 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_10,
-                cash_Benefit_insured_11 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_11,
-                cash_Benefit_insured_12 = osRNEData.FirstOrDefault()?.cash_Benefit_insured_12,
-                cash_Benefit_Premium_Check = osRNEData.FirstOrDefault()?.cash_Benefit_Premium_Check,
-
-                loading_insured_1 = osRNEData.FirstOrDefault()?.loading_insured_1,
-                loading_insured_2 = osRNEData.FirstOrDefault()?.loading_insured_2,
-                loading_insured_3 = osRNEData.FirstOrDefault()?.loading_insured_3,
-                loading_insured_4 = osRNEData.FirstOrDefault()?.loading_insured_4,
-                loading_insured_5 = osRNEData.FirstOrDefault()?.loading_insured_5,
-                loading_insured_6 = osRNEData.FirstOrDefault()?.loading_insured_6,
-                loading_insured_7 = osRNEData.FirstOrDefault()?.loading_insured_7,
-                loading_insured_8 = osRNEData.FirstOrDefault()?.loading_insured_8,
-                loading_insured_9 = osRNEData.FirstOrDefault()?.loading_insured_9,
-                loading_insured_10 = osRNEData.FirstOrDefault()?.loading_insured_10,
-                loading_insured_11 = osRNEData.FirstOrDefault()?.loading_insured_11,
-                loading_insured_12 = osRNEData.FirstOrDefault()?.loading_insured_12,
-
-                critical_Illness_AddOn_Premium = osRNEData.FirstOrDefault()?.critical_Illness_AddOn_Premium,
-                critical_Illness_Add_On_Opt = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Opt,
-                critical_Illness_Add_On_SI = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_SI,
-                critical_Illness_Add_On_Premium1 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium1,
-                critical_Illness_Add_On_Premium2 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium2,
-                critical_Illness_Add_On_Premium3 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium3,
-                critical_Illness_Add_On_Premium4 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium4,
-                critical_Illness_Add_On_Premium5 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium5,
-                critical_Illness_Add_On_Premium6 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium6,
-                critical_Illness_Add_On_Premium7 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium7,
-                critical_Illness_Add_On_Premium8 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium8,
-                critical_Illness_Add_On_Premium9 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium9,
-                critical_Illness_Add_On_Premium10 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium10,
-                critical_Illness_Add_On_Premium11 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium11,
-                critical_Illness_Add_On_Premium12 = osRNEData.FirstOrDefault()?.critical_Illness_Add_On_Premium12,
-                ci_Variant = osRNEData.FirstOrDefault()?.ci_Variant,
-
-                cash_Benefit_Opt = osRNEData.FirstOrDefault()?.cash_Benefit_Opt,
-
-                base_Loading_And_Discount_Final_BasePremium = osRNEData.FirstOrDefault()?.base_Loading_And_Discount_Final_BasePremium,
-                base_Loading_And_Discount_Premium = osRNEData.FirstOrDefault()?.base_Loading_And_Discount_Premium,
-                net_premium = osRNEData.FirstOrDefault()?.net_premium,
-
-                num_tot_premium = osRNEData.FirstOrDefault()?.num_tot_premium.HasValue == true ?
-                                  (decimal?)Math.Round(osRNEData.FirstOrDefault().num_tot_premium.Value, 2)
-                                  : (decimal?)null,
-
-                finalPremium = osRNEData.FirstOrDefault()?.finalPremium.HasValue == true ?
-                                  (decimal?)Math.Round(osRNEData.FirstOrDefault().finalPremium.Value, 2)
-                                  : (decimal?)null,
-                GST = osRNEData.FirstOrDefault()?.GST.HasValue == true ?
-                                  (decimal?)Math.Round(osRNEData.FirstOrDefault().GST.Value, 2)
-                                  : (decimal?)null,                
-               
-                //upsell premiums and sum insureds
-                upsell_sum_insured1 = osRNEDataUpSell.FirstOrDefault()?.sum_insured1,
-                upsell_sum_insured2 = osRNEDataUpSell.FirstOrDefault()?.sum_insured2,
-                upsell_sum_insured3 = osRNEDataUpSell.FirstOrDefault()?.sum_insured3,
-                upsell_sum_insured4 = osRNEDataUpSell.FirstOrDefault()?.sum_insured4,
-                upsell_sum_insured5 = osRNEDataUpSell.FirstOrDefault()?.sum_insured5,
-                upsell_sum_insured6 = osRNEDataUpSell.FirstOrDefault()?.sum_insured6,
-
-                base_upsell_Premium1 = osRNEDataUpSell.FirstOrDefault()?.base_premium_1,
-                base_upsell_Premium2 = osRNEDataUpSell.FirstOrDefault()?.base_premium_2,
-                base_upsell_Premium3 = osRNEDataUpSell.FirstOrDefault()?.base_premium_3,
-                base_upsell_Premium4 = osRNEDataUpSell.FirstOrDefault()?.base_premium_4,
-                base_upsell_Premium5 = osRNEDataUpSell.FirstOrDefault()?.base_premium_5,
-                base_upsell_Premium6 = osRNEDataUpSell.FirstOrDefault()?.base_premium_6,
-
-                final_Premium_upsell = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell
-            };
-            decimal? crosscheck1 = osRNEDataUpSell.FirstOrDefault()?.baseprem_cross_Check;
-            decimal? crosscheck2 = osRNEDataUpSell.FirstOrDefault()?.upsellbaseprem_cross_Check;
-            decimal? netPremium = osRNEDataUpSell.FirstOrDefault()?.netPremium;
-
-            decimal? finalPremium = osRNEDataUpSell.FirstOrDefault()?.final_Premium_upsell;
-
-            decimal? gst = osRNEDataUpSell.FirstOrDefault()?.GST;
-
-            if (objOptimaSecurePremiumValidationUpSell?.policy_number == null)
-            {
-                Console.WriteLine("Policy number not found.",policyNo);
-            }
-            string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
-            using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
-            {
-                dbConnection.Open();
-                // Check if the record exists by selecting only required columns
-                var record_idst = dbConnection.QueryFirstOrDefault<premium_validation>(
-                    "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
-                    new { CertificateNo = policyNo });
-                
-                if (record_idst == null)
-                {
-                    if (objOptimaSecurePremiumValidationUpSell.insured_cb1 == string.Empty && objOptimaSecurePremiumValidationUpSell.insured_cb1 == null)
-                    {
-                        Console.WriteLine($"Inserting data for Policy No: {policyNo}");
-                        var insertQuery = @"
-                    INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status)
-                    VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - No CB', 'CB SI cannot be zero')";
-
-                        dbConnection.Execute(insertQuery, new
-                        {
-                            CertificateNo = policyNo,
-                            VerifiedPrem = netPremium,
-                            VerifiedGst = gst,
-                            VerifiedTotalPrem = finalPremium
-                        });
-                        Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
-                        //record_idst.rn_generation_status = "IT Issue - No CB";
-                        //record_idst.error_description = "CB SI cannot be zero";
-                        // Update the existing record
-                        //var updateQuery = @"
-                        //    UPDATE ins.premium_validation
-                        //    SET rn_generation_status=@RNGenerationStatus
-                        //        error_description = @ErrorDescription
-                        //    WHERE certificate_no = @CertificateNo";
-
-                        //dbConnection.Execute(updateQuery, new
-                        //{
-                        //    RNGenerationStatus = record_idst.rn_generation_status,
-                        //    ErrorDescription = record_idst.error_description
-                        //});
-                    }
-                    else
-                    {
-                        try
-                        {
-                            await HandleCrosschecksAndUpdateStatus(policyNo, osRNEData.FirstOrDefault(), crosscheck1, crosscheck2, netPremium, finalPremium, gst);
-                        }
-                        catch (DbUpdateConcurrencyException ex)
-                        {
-                            var entry = ex.Entries.Single();
-                            await entry.ReloadAsync();
-                        }
-                        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "40P01")
-                        {
-
-                        }
-                       
-                    }
-                }
-               
-                if (objOptimaSecurePremiumValidationUpSell != null)
-                {
-                    var no_of_members = objOptimaSecurePremiumValidationUpSell.no_of_members;
-                    var ridercount = 3;
-                    var policy_number = objOptimaSecurePremiumValidationUpSell.policy_number;
-                    var reference_number = objOptimaSecurePremiumValidationUpSell.reference_num;
-                    var newRecord = new List<rne_calculated_cover_rg>();
-                    for (int i = 1; i <= no_of_members; i++)
-                    {
-                        var sumInsured = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"sum_insured{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var basePremium = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"basePremium{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var sumInsuredupsell = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"upsell_sum_insured{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var basePremiumupsell = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"base_upsell_Premium{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var finalPremiumupsell = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"final_Premium_upsell")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-
-                        if (no_of_members > 1 && i >= 2 && i <= 6)
-                        {
-                            basePremium *= 0.45m;
-                            basePremiumupsell *= 0.45m;
-                        }
-                        var newRecord1 = new rne_calculated_cover_rg
-                        {
-                            policy_number = policy_number,
-                            referencenum = reference_number,
-                            suminsured = sumInsured,
-                            premium = basePremium,
-                            riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
-                            covername = "Basic Optima Secure Cover"
-                        };
-                        var newRecord2 = new rne_calculated_cover_rg
-                        {
-                            isupsell = 1,
-                            policy_number = policy_number,
-                            referencenum = reference_number,
-                            suminsured = sumInsuredupsell,
-                            premium = basePremiumupsell,
-                            totalpremium = finalPremiumupsell,//total premium column in rne_calculated_cover_rg will store the finalpremiumupsell from premium computation
-                            riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{i}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
-                            covername = "Upsell Cover"
-                        };
-                        newRecord.Add(newRecord1);
-                        newRecord.Add(newRecord2);
-                    }
-                    for (int j = 1; j <= ridercount; j++)
-                    {
-                        //var riderSumInsured = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"criticalAdvantageRider_SumInsured_{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var riderPremium = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"critical_Illness_Add_On_PremiumList{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var riderPremiumpr = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"cash_Benefit_insured_{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-                        var riderPremiumur = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"baseAndLoading_Unlimited_Restore")?.GetValue(objOptimaSecurePremiumValidationUpSell));
-
-                        //to print Critical Advantage rider
-                        if (riderPremium > 0)
-                        {
-                            var riderRecord = new rne_calculated_cover_rg
-                            {
-                                policy_number = policy_number,
-                                referencenum = reference_number,
-                                //to print Critical Advantage rider
-                                riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
-                                premium = riderPremium,
-                                covername = "my:health Critical illness Add on"
-                            };
-                            newRecord.Add(riderRecord);
-                        }
-                        //to print Protector Rider
-                        if (riderPremiumpr > 0)
-                        {
-                            var riderRecordpr = new rne_calculated_cover_rg
-                            {
-                                policy_number = policy_number,
-                                referencenum = reference_number,
-                                //to print Critical Advantage rider
-                                riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
-                                premium = riderPremiumpr,
-                                covername = "my:health Hospital Cash Benefit Add On"
-                            };
-                            newRecord.Add(riderRecordpr);
-                        }
-                        // to print Unlimited Restore
-                        if (riderPremiumur > 0)
-                        {
-                            var riderRecordur = new rne_calculated_cover_rg
-                            {
-                                policy_number = policy_number,
-                                referencenum = reference_number,
-                                //to print Hospital Daily Cash Rider
-                                riskname = objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"txt_insuredname{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell)?.ToString(),
-                                premium = riderPremiumur,
-                                covername = "Unlimited Restore"
-                            };
-                            newRecord.Add(riderRecordur);
-                        }
-                    }
-                    var insertQuery = @"
-    INSERT INTO rne_calculated_cover_rg (policy_number, referencenum, suminsured, premium, totalpremium, riskname, covername, isupsell)
-    VALUES (@policy_number, @referencenum, @suminsured, @premium, @totalpremium, @riskname, @covername, @isupsell);
-    ";
-
-                    await dbConnection.ExecuteAsync(insertQuery, newRecord).ConfigureAwait(false);
-                }
-
-                return objOptimaSecurePremiumValidationUpSell;
-            }
-        }
-        async Task<verifiedpremiumvalues> GetCrosscheckValue(string policyNo, List<OptimaRestoreRNE> orRNEData)
-        {
-            string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
-            using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
-            {
-                dbConnection.Open();
-                var record = dbConnection.QueryFirstOrDefault<premium_validation>(
-                    "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
-                    new { CertificateNo = policyNo.ToString() });
-
-                if (record != null && record.rn_generation_status == null)
-                {
-                    decimal? crosscheck1 = (orRNEData.FirstOrDefault().num_tot_premium - record.verified_total_prem);
-                    return new verifiedpremiumvalues
-                    {
-                        verified_gst = record.verified_gst ?? 0,  // Handle possible nulls
-                        verified_total_premium = record.verified_total_prem ?? 0,
-                        verified_net_premium = record.verified_prem ?? 0,
-                        crosscheck = crosscheck1
-                    };
-
-                }
-                else
-                {
-                    return new verifiedpremiumvalues
-                    {
-                        verified_gst = 0,  // Default values
-                        verified_total_premium = 0,
-                        verified_net_premium = 0,
-                        crosscheck = null
-                    };
-                }
-
             }
         }
         async Task HandleCrosschecksAndUpdateStatus(string policyNo,OptimaSecureRNE osRNEData, decimal? crosscheck1, decimal? crosscheck2, decimal? netPremium, decimal? finalPremium, decimal? gst)
@@ -1351,8 +1247,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             string? connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"].ConnectionString;
             using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
             {
-                dbConnection.Open();
-                // Check if the record exists by selecting only required columns
+                dbConnection.Open();              
                 var record = dbConnection.QueryFirstOrDefault<premium_validation>(
                     "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
                     new { CertificateNo = osRNEData.policy_number.ToString() });
@@ -1361,8 +1256,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 {
                     decimal crosscheck1Value = crosscheck1.GetValueOrDefault(0); 
                     decimal crosscheck2Value = crosscheck2.GetValueOrDefault(0); 
-                    if (crosscheck1Value != 0 && crosscheck2Value != 0)
-                    {
+                   
                         if ((Math.Abs(crosscheck1Value) <= 10) || ((Math.Abs(crosscheck1Value) <= 10 && Math.Abs(crosscheck2Value) <= 10)))
                         {
                             Console.WriteLine($"Inserting data for Policy No: {policyNo}");
@@ -1426,8 +1320,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                 VerifiedTotalPrem = finalPremium,
                             });
                             Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
-                        }
-                    }
+                        }                 
                  
                 }
                 
@@ -1530,31 +1423,27 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             foreach (var row in osRNEData)
             {
                 var policNo16 = row.policy_number;
-                var iDSTData = idstData.FirstOrDefault(x => x.certificate_no == policNo16);
-                // Initialize DataTable and define columns
-                DataTable table = new DataTable();
-                // Define columns based on your headers
-                for (int i = 11; i <= 1010; i += 1)  // Adjust the range if necessary
+                var iDSTData = idstData.FirstOrDefault(x => x.certificate_no == policNo16);             
+                DataTable table = new DataTable();               
+                for (int i = 11; i <= 1010; i += 1) 
                 {
                     table.Columns.Add($"covername{i}", typeof(string));
                     table.Columns.Add($"coversi{i}", typeof(string));
                     table.Columns.Add($"coverprem{i}", typeof(string));
                     table.Columns.Add($"coverloadingrate{i}", typeof(string));
                 }
-                // Add current data as a new row
+               
                 var data = ExtractData(row);
                 DataRow newRow = table.NewRow();
                 foreach (var column in data)
                 {
-                    // Check if the DataTable contains the column before setting its value
+                   
                     if (table.Columns.Contains(column.Key))
                     {
                         newRow[column.Key] = column.Value;
                     }
-                }   // Add the populated DataRow to the DataTable
+                }   
                 table.Rows.Add(newRow);
-
-                // Search for specific rider details
                 string searchRider1 = "my:health Critical illness Add on";
                 string searchRider2 = "my:health Hospital Cash Benefit Add On";
                 string searchRider3 = "Unlimited Restore";
@@ -1566,15 +1455,13 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                 DataTable siRiderTwoDataTable = new DataTable();
                 siRiderTwoDataTable.Columns.Add("RiderName", typeof(string));
-                siRiderTwoDataTable.Columns.Add("SIValue", typeof(object));
-                // Retrieve and print Rider SI values based on Rider Name               
+                siRiderTwoDataTable.Columns.Add("SIValue", typeof(object));                          
                 siRiderTwoDataTable = GetRiderSI(table, searchRider2);
 
 
                 DataTable siRiderThreeDataTable = new DataTable();
                 siRiderThreeDataTable.Columns.Add("RiderName", typeof(string));
-                siRiderThreeDataTable.Columns.Add("SIValue", typeof(object));
-                // Retrieve and print Rider SI values based on Rider Name               
+                siRiderThreeDataTable.Columns.Add("SIValue", typeof(object));                           
                 siRiderThreeDataTable = GetRiderSI(table, searchRider3);
 
                 string? policyLdDesc1 = row.pollddesc1;
@@ -1663,10 +1550,8 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 var nonNullAges = ageValues.Where(age => age.HasValue && age.Value != 0).ToList();
                 var noOfMembers = nonNullAges.Count();
                 var eldestMember = ageValues.Max();
-                var numberOfMembers = noOfMembers;//calculate this field
-                int? count = noOfMembers;
-
-                //calculation of baseprem and crosscheck1 based on suminsured
+                var numberOfMembers = noOfMembers;
+                int? count = noOfMembers;               
                 if ((row.sum_insured1.HasValue && row.sum_insured1 != null) || (row.sum_insured2.HasValue && row.sum_insured2 != null) || (row.sum_insured3.HasValue && row.sum_insured4 != null) || (row.sum_insured5.HasValue && row.sum_insured5 != null) || (row.sum_insured6.HasValue && row.sum_insured6 != null))
                 {
                     for (int i = 1; i <= noOfMembers; i++)
@@ -1762,8 +1647,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     if (columnName == null)
                     {
                         throw new ArgumentException($"Invalid policy period: {policyperiod}");
-                    }
-                    // Construct the raw SQL query
+                    }                  
                     var sql = $@"
                 SELECT {columnName}
                 FROM baserate
@@ -1815,10 +1699,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                     decimal?[] cappedDiscountValues = new decimal?[]
                       {
-                            BaseAndLoadingLoyaltyDiscount, // Value from cell C158
-                            BaseAndLoadingEmployeeDiscount, // Value from cell C159
-                            BaseAndLoadingOnlineDiscount, // Value from cell C160
-                            BaseAndLoadingFamilyDiscount  // Value from cell C161
+                            BaseAndLoadingLoyaltyDiscount, 
+                            BaseAndLoadingEmployeeDiscount,
+                            BaseAndLoadingOnlineDiscount, 
+                            BaseAndLoadingFamilyDiscount 
                       };
 
                     decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
@@ -1835,8 +1719,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                             unlimitedRestoreValue = 1;
                     }
-
-                    // Apply the conditional logic
+                   
                     decimal? unlimitedRestore = unlimitedRestoreValue > 0 ? oSBasePremium * 0.005m : 0;//calculation required
                     decimal? finalBasePremium = (oSBasePremium + unlimitedRestore) ?? 0;
                     decimal? SI = 0;
@@ -1856,8 +1739,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
 
                         ciVariants.Add(ciVariant ?? 9);
-                    }
-                    // decimal? CIVariant = SI != 0 ? 9 : 0;
+                    }                 
                     var policyPeriod = GetColumnNameForPolicyPeriod(policyperiod);
                     if (policyPeriod == null)
                     {
@@ -1870,39 +1752,35 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     List<decimal?> ciRates = new List<decimal?>();
                     for (int i = 0; i < insuredAges.Count; i++)
                     {
-                        if (insuredAges[i].HasValue)  // Check if the age is valid
+                        if (insuredAges[i].HasValue)  
                         {
                             decimal? ciRate = await GetCIRate(insuredAges[i].Value, ciVariants[i], policyPeriod, sqlpolicyPeriod, cirates);
-                            ciRates.Add(ciRate);  // Add the resulting CI rate to the list
+                            ciRates.Add(ciRate);  
                         }
                         else
                         {
-                            ciRates.Add(null);  // If the age is invalid, add a null CI rate
+                            ciRates.Add(null); 
                         }
                     }
                     List<decimal?> premiums = new List<decimal?>();
                     foreach (var ciRate in ciRates)
                     {
-                        decimal? processedCiRate = GetCiRatesValues(SI, ciRate);  // Process the CI rate using the existing method
-                        premiums.Add(processedCiRate);  // Add the processed rate to the list
+                        decimal? processedCiRate = GetCiRatesValues(SI, ciRate); 
+                        premiums.Add(processedCiRate); 
                     }
                     decimal? premium = premiums.Sum();
                     List<decimal?> loadingPremiumvalues = new List<decimal?>();
                     for (int i = 1; i < noOfMembers; i++)
                     {
-                        decimal? premiumm = premiums[i]; // Fetch the premium for the current member
-                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+                        decimal? premiumm = premiums[i]; 
+                        decimal? basicLoadingRate = basicLoadingRates[i]; 
                         decimal? loadingPremm = CalculateResultMyBaseLoading(premium, basicLoadingRate);
-
-                        // Store the result in the list
                         loadingPremiumvalues.Add(loadingPrem);
                     }
                     decimal? loadingPremium = loadingPremiumvalues.Sum();
                     decimal? cIloyaltyDiscountValue;
                     decimal? cIloyaltyDiscount;
-                    GetLoyaltyDiscount(loyaltyDiscountValue, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
-                    //GetLoyaltyDiscount(loyaltyDiscount, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
-                    // Get the value from the 799th column (index 799)
+                    GetLoyaltyDiscount(loyaltyDiscountValue, out cIloyaltyDiscountValue, out cIloyaltyDiscount);                   
                     decimal? cIemployeeDiscountValue = employeeDiscount;
                     decimal? cIonlineDiscountValue = onlineDiscount;
                     decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
@@ -1914,18 +1792,18 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? cIBaseFamilyDisocunt = (cIBaseAndLoading * cIFamilyDiscountValue) ?? 0;
                     decimal?[] cIcappedDiscountValues = new decimal?[]
                     {
-                            cIBaseLoyaltyDisocunt, // Value from cell C158
-                            cIBaseEmployeeDisocunt, // Value from cell C159
-                            cIBaseOnlineDisocunt, // Value from cell C160
-                            cIBaseFamilyDisocunt  // Value from cell C161
+                            cIBaseLoyaltyDisocunt, 
+                            cIBaseEmployeeDisocunt, 
+                            cIBaseOnlineDisocunt, 
+                            cIBaseFamilyDisocunt  
                     };
                     decimal? cicappedDiscount = CalculateCappedDiscount(cappedDiscountValues, cIBaseAndLoading);
                     decimal?[] cicappedDiscountValues = new decimal?[]
                       {
-                            cIBaseLoyaltyDisocunt, // Value from cell C158
-                            cIBaseEmployeeDisocunt, // Value from cell C159
-                            cIBaseOnlineDisocunt, // Value from cell C160
-                            cIBaseFamilyDisocunt  // Value from cell C161
+                            cIBaseLoyaltyDisocunt,
+                            cIBaseEmployeeDisocunt, 
+                            cIBaseOnlineDisocunt, 
+                            cIBaseFamilyDisocunt  
                       };
                     decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
                     decimal? CIBaselongTermDiscount = ((cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount) ?? 0;
@@ -1959,8 +1837,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             .FirstOrDefault();
 
                         insuredRelationTAGValues.Add(insuredRelationTAG);
-                    }
-                    // Perform the count and apply the logic
+                    }                  
                     string aValue = ProcessCountForA(insuredRelationTAGValues);
                     string pValue = ProcessCountForP(insuredRelationTAGValues);
                     string cValue = ProcessCountForC(insuredRelationTAGValues);
@@ -1984,14 +1861,12 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     string? C = cValue;
                     string? familyDefn = (A ?? string.Empty) + (P ?? string.Empty) + (C ?? string.Empty);
                     familyDefn = familyDefn.Trim();
-
-                    // Construct the raw SQL query
+                  
                     var sqlperiod = $@"
                 SELECT {columnName}
                 FROM hdcrates
                 WHERE si = @p0 AND age = @p1 AND age_band = @p2 AND plan_type=@p3";
-
-                    // Execute the raw SQL query
+                    
                     var cashBenefitPremiumValue = hdcrates
                        .Where(roww =>
                            roww.Value is Hashtable rateDetails &&
@@ -2061,10 +1936,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                      c2 = details["c2"]?.ToString()
                                  };
                              }
-                             return null; // Return null if `details` is not a Hashtable
+                             return null; 
                          })
-                         .Where(details => details != null) // Filter out null results
-                         .ToList(); // Get the results as a list
+                         .Where(details => details != null) 
+                         .ToList(); 
                     var selectedValues = results.Select(r => new
                     {
                         a1 = Convert.ToDecimal(r.a1),
@@ -2118,8 +1993,8 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     List<decimal?> cashBenefitLoadingPremiumValues = new List<decimal?>();
                     for (int i = 0; i < noOfMembers; i++)
                     {
-                        decimal? insuredValue = premiumCheckInsuredValues[i]; // Fetch the insured value for the current member
-                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+                        decimal? insuredValue = premiumCheckInsuredValues[i]; 
+                        decimal? basicLoadingRate = basicLoadingRates[i]; 
 
                         decimal? cashBenefit = CalculateLoadingPremium(insuredValue, basicLoadingRate / 100);
                         cashBenefitLoadingPremiumValues.Add(cashBenefit);
@@ -2130,15 +2005,15 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? hDCBaseAndLoadingLoyaltyDiscount = (hDCBaseAndLoading * cIloyaltyDiscount) ?? 0;
                     decimal? hDCBaseAndLoadingEmployeeDiscount = hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue);
                     onlineDiscountValue = (onlineDiscountValue / 100) ?? 0;
-                    decimal? hDCOnlineDisocuntValue = (hDCBaseAndLoading * (onlineDiscountValue)) ?? 0;//GetOnlineDiscount(noOfMembers);
+                    decimal? hDCOnlineDisocuntValue = (hDCBaseAndLoading * (onlineDiscountValue)) ?? 0;
                     decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
                     decimal? hDCBaseAndLoadingFamilyDiscount = (hDCBaseAndLoading * (familyDiscountValue)) ?? 0;
                     decimal?[] hDCcappedDiscountValues = new decimal?[]
                      {
-                            hDCBaseAndLoadingLoyaltyDiscount, // Value from cell C158
-                            hDCBaseAndLoadingEmployeeDiscount, // Value from cell C159
-                            hDCBaseAndLoadingOnlineDiscount, // Value from cell C160
-                            hDCBaseAndLoadingFamilyDiscount  // Value from cell C161
+                            hDCBaseAndLoadingLoyaltyDiscount,
+                            hDCBaseAndLoadingEmployeeDiscount, 
+                            hDCBaseAndLoadingOnlineDiscount,
+                            hDCBaseAndLoadingFamilyDiscount  
                      };
 
                     decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
@@ -2147,10 +2022,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium) ?? 0;
                     decimal? GST = (netPremium * 0.18m) ?? 0;
                     decimal? finalPremium = (netPremium + GST) ?? 0;
-                    baseCrosscheck = (row.num_tot_premium - finalPremium) ?? 0;
+                    baseCrosscheck = (row.num_tot_premium - finalPremium) ;
                 }
 
-                //calculation of upsellbaseprem and crosscheck2 based on upsell value
                 if (row.upselltype1 != null || row.upselltype2 != null || row.upselltype3 != null || row.upselltype4 != null || row.upselltype5 != null)
                 {
                     for (int i = 1; i <= noOfMembers; i++)
@@ -2304,25 +2178,23 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? loyaltyDiscountValue = loyaltyDiscount;
                     loyaltyDiscountValue = loyaltyDiscount.HasValue && loyaltyDiscount.Value > 0 ? 2.5m : 0.0m;
 
-                    // Get the value from the 799th column (index 799)
+                   
                     decimal? employeeDiscountValue = employeeDiscount;
                     employeeDiscountValue = employeeDiscount.HasValue && employeeDiscount.Value > 0 ? 5.0m : 0.0m;
 
                     decimal? onlineDiscountValue = onlineDiscount;
                     onlineDiscountValue = onlineDiscount.HasValue && onlineDiscount.Value > 0 ? 5.0m : 0.0m;
-
-                    // Calculate the discount based on the policy type and number of members
+                                      
                     decimal? familyDiscountValue = CalculateFamilyDiscount(policyType, numberOfMembers);
                     decimal? combiDiscountValue = CalculateCombiDiscount(combiDiscounts);
-
-                    //// Calculate the percentage based on the policy period
+                   
                     decimal tenureDiscount = GetPolicyPercentage(policyperiod);
                     var columnName = GetColumnNameForPolicyPeriod(policyperiod);
                     if (columnName == null)
                     {
                         throw new ArgumentException($"Invalid policy period: {policyperiod}");
                     }
-                    // Construct the raw SQL query
+                  
                     var sql = $@"
  SELECT {columnName}
  FROM baserate
@@ -2348,7 +2220,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                         basePremiumsList.Add(basePrem);
                     }
-                    string condition = policyType; // Change to "INDIVIDUAL" to test the other case
+                    string condition = policyType;
 
                     decimal? basePremium = CalculateResult(condition, basePremiumsList);
                     deductibleDiscount = (deductibleDiscount / 100) ?? 0;
@@ -2374,10 +2246,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                     decimal?[] cappedDiscountValues = new decimal?[]
                       {
-             BaseAndLoadingLoyaltyDiscount, // Value from cell C158
-             BaseAndLoadingEmployeeDiscount, // Value from cell C159
-             BaseAndLoadingOnlineDiscount, // Value from cell C160
-             BaseAndLoadingFamilyDiscount  // Value from cell C161
+             BaseAndLoadingLoyaltyDiscount, 
+             BaseAndLoadingEmployeeDiscount, 
+             BaseAndLoadingOnlineDiscount, 
+             BaseAndLoadingFamilyDiscount  
                       };
 
                     decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
@@ -2394,8 +2266,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                             unlimitedRestoreValue = 1;
                     }
-
-                    // Apply the conditional logic
+               
                     decimal? unlimitedRestore = unlimitedRestoreValue > 0 ? oSBasePremium * 0.005m : 0;//calculation required
                     decimal? finalBasePremium = oSBasePremium + unlimitedRestore;
                     decimal? SI = 0;
@@ -2415,8 +2286,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         decimal? ciVariant = (decimal?)iDSTData.GetType().GetProperty($"insured1_information2_{i}")?.GetValue(iDSTData);
 
                         ciVariants.Add(ciVariant ?? 9);
-                    }
-                    // decimal? CIVariant = SI != 0 ? 9 : 0;
+                    }                   
                     var policyPeriod = GetColumnNameForPolicyPeriod(policyperiod);
                     if (policyPeriod == null)
                     {
@@ -2429,39 +2299,37 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     List<decimal?> ciRates = new List<decimal?>();
                     for (int i = 0; i < insuredAges.Count; i++)
                     {
-                        if (insuredAges[i].HasValue)  // Check if the age is valid
+                        if (insuredAges[i].HasValue)  
                         {
                             decimal? ciRate = await GetCIRate(insuredAges[i].Value, ciVariants[i], policyPeriod, sqlpolicyPeriod, cirates);
-                            ciRates.Add(ciRate);  // Add the resulting CI rate to the list
+                            ciRates.Add(ciRate);
                         }
                         else
                         {
-                            ciRates.Add(null);  // If the age is invalid, add a null CI rate
+                            ciRates.Add(null); 
                         }
                     }
                     List<decimal?> premiums = new List<decimal?>();
                     foreach (var ciRate in ciRates)
                     {
-                        decimal? processedCiRate = GetCiRatesValues(SI, ciRate);  // Process the CI rate using the existing method
-                        premiums.Add(processedCiRate);  // Add the processed rate to the list
+                        decimal? processedCiRate = GetCiRatesValues(SI, ciRate); 
+                        premiums.Add(processedCiRate);  
                     }
                     decimal? premium = premiums.Sum();
                     List<decimal?> loadingPremiumvalues = new List<decimal?>();
                     for (int i = 1; i < noOfMembers; i++)
                     {
-                        decimal? premiumm = premiums[i]; // Fetch the premium for the current member
-                        decimal? basicLoadingRate = basicLoadingRates[i]; // Fetch the loading rate for the current member
+                        decimal? premiumm = premiums[i];
+                        decimal? basicLoadingRate = basicLoadingRates[i]; 
                         decimal? loadingPremm = CalculateResultMyBaseLoading(premium, basicLoadingRate);
 
-                        // Store the result in the list
                         loadingPremiumvalues.Add(loadingPrem);
                     }
                     decimal? loadingPremium = loadingPremiumvalues.Sum();
                     decimal? cIloyaltyDiscountValue;
                     decimal? cIloyaltyDiscount;
                     GetLoyaltyDiscount(loyaltyDiscountValue, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
-                    //GetLoyaltyDiscount(loyaltyDiscount, out cIloyaltyDiscountValue, out cIloyaltyDiscount);
-                    // Get the value from the 799th column (index 799)
+                  
                     decimal? cIemployeeDiscountValue = employeeDiscount;
                     decimal? cIonlineDiscountValue = onlineDiscount;
                     decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
@@ -2473,18 +2341,18 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? cIBaseFamilyDisocunt = (cIBaseAndLoading * cIFamilyDiscountValue) ?? 0;
                     decimal?[] cIcappedDiscountValues = new decimal?[]
                     {
-             cIBaseLoyaltyDisocunt, // Value from cell C158
-             cIBaseEmployeeDisocunt, // Value from cell C159
-             cIBaseOnlineDisocunt, // Value from cell C160
-             cIBaseFamilyDisocunt  // Value from cell C161
+             cIBaseLoyaltyDisocunt,
+             cIBaseEmployeeDisocunt,
+             cIBaseOnlineDisocunt,
+             cIBaseFamilyDisocunt  
                     };
                     decimal? cicappedDiscount = CalculateCappedDiscount(cappedDiscountValues, cIBaseAndLoading);
                     decimal?[] cicappedDiscountValues = new decimal?[]
                       {
-             cIBaseLoyaltyDisocunt, // Value from cell C158
-             cIBaseEmployeeDisocunt, // Value from cell C159
-             cIBaseOnlineDisocunt, // Value from cell C160
-             cIBaseFamilyDisocunt  // Value from cell C161
+             cIBaseLoyaltyDisocunt, 
+             cIBaseEmployeeDisocunt,
+             cIBaseOnlineDisocunt, 
+             cIBaseFamilyDisocunt 
                       };
                     decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
                     decimal? CIBaselongTermDiscount = ((cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount) ?? 0;
@@ -2544,13 +2412,12 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     string? familyDefn = (A ?? string.Empty) + (P ?? string.Empty) + (C ?? string.Empty);
                     familyDefn = familyDefn.Trim();
 
-                    // Construct the raw SQL query
+                 
                     var sqlperiod = $@"
  SELECT {columnName}
  FROM hdcrates
  WHERE si = @p0 AND age = @p1 AND age_band = @p2 AND plan_type=@p3";
 
-                    // Execute the raw SQL query
                     var cashBenefitPremiumValue = hdcrates
                        .Where(roww =>
                            roww.Value is Hashtable rateDetails &&
@@ -2570,45 +2437,39 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     string? ageBand = hdcAgeBand;
                     cashBenefitPremiumValue = cashBenefitPremiumValue ?? 0m;
                     decimal? cashBenefitPremium = cashBenefitPremiumValue;
-                    // Construct the raw SQL query
-
-                    var dictionary = new Dictionary<string, List<string>>
- {
-     { "2a", GenerateColumnNames("2a") },
-      { "2c", GenerateColumnNames("2c")},
-       { "2a2p", Generate2A2PColumnNames("2a2p") },
-       { "2a2c", Generate2A2PColumnNames("2a2c") }
- };
+                    
+                      var dictionary = new Dictionary<string, List<string>>
+                     {
+                         { "2a", GenerateColumnNames("2a") },
+                          { "2c", GenerateColumnNames("2c")},
+                           { "2a2p", Generate2A2PColumnNames("2a2p") },
+                           { "2a2c", Generate2A2PColumnNames("2a2c") }
+                     };
 
                     var key = familyDefn.ToLower();
                     var columnNamesString = "";
                     if (dictionary.TryGetValue(key, out var columnValues))
-                    {
-                        // Convert the list of column names to a single string
-                        columnNamesString = string.Join(", ", columnValues);
-                       // Console.WriteLine($"Key: {key}");
-                        //Console.WriteLine($"Column Values: {columnNamesString}");
+                    {                       
+                        columnNamesString = string.Join(", ", columnValues);                     
                     }
-                    ////{columnNamesString},p1, c1, c2, c3, p2,eldest_member_age_band, family_composition
+                  
                     var sqlhdcproportionsplit = $@"
  SELECT * 
  FROM hdcproportionsplit
- WHERE  eldest_member_age_band = @p0 AND family_composition = @p1";
-                    //Execute the raw SQL query
+ WHERE  eldest_member_age_band = @p0 AND family_composition = @p1";                 
 
                     var results = hdcproportionsplit
                              .Where(roww =>
                              {
                                  if (roww.Value is Hashtable rateDetails)
-                                 {
-                                     // Check that "eldest_member_age_band" exists and is not null
+                                 {                                    
                                      var eldestMemberAgeBand = rateDetails["eldest_member_age_band"];
                                      var deductible = rateDetails["family_composition"];
 
                                      return eldestMemberAgeBand != null &&
-                                            eldestMemberAgeBand.ToString() == hdcAgeBand && // Correct comparison for "eldest_member_age_band"
+                                            eldestMemberAgeBand.ToString() == hdcAgeBand && 
                                             deductible != null &&
-                                            deductible.ToString() == familyDefn; // Correct comparison for "deductible"
+                                            deductible.ToString() == familyDefn; 
                                  }
                                  return false;
                              })
@@ -2616,7 +2477,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                          {
                              if (roww.Value is Hashtable details)
                              {
-                                 // Only return a result if the necessary keys exist
+                                
                                  return new
                                  {
                                      eldest_member_age_band = details["eldest_member_age_band"]?.ToString(), // Use null-conditional operator
@@ -2629,10 +2490,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                      c2 = details["c2"]?.ToString()
                                  };
                              }
-                             return null; // Return null if `details` is not a Hashtable
+                             return null;
                          })
-                         .Where(details => details != null) // Filter out null results
-                         .ToList(); // Get the results as a list
+                         .Where(details => details != null) 
+                         .ToList(); 
                     var selectedValues = results.Select(r => new
                     {
                         a1 = Convert.ToDecimal(r.a1),
@@ -2703,15 +2564,15 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? hDCBaseAndLoadingLoyaltyDiscount = (hDCBaseAndLoading * cIloyaltyDiscount) ?? 0;
                     decimal? hDCBaseAndLoadingEmployeeDiscount = (hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue))??0;
                     onlineDiscountValue = (onlineDiscountValue / 100) ?? 0;
-                    decimal? hDCOnlineDisocuntValue = (hDCBaseAndLoading * (onlineDiscountValue)) ?? 0;//GetOnlineDiscount(noOfMembers);
+                    decimal? hDCOnlineDisocuntValue = (hDCBaseAndLoading * (onlineDiscountValue)) ?? 0;
                     decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
                     decimal? hDCBaseAndLoadingFamilyDiscount = (hDCBaseAndLoading * (familyDiscountValue)) ?? 0;
                     decimal?[] hDCcappedDiscountValues = new decimal?[]
                      {
-             hDCBaseAndLoadingLoyaltyDiscount, // Value from cell C158
-             hDCBaseAndLoadingEmployeeDiscount, // Value from cell C159
-             hDCBaseAndLoadingOnlineDiscount, // Value from cell C160
-             hDCBaseAndLoadingFamilyDiscount  // Value from cell C161
+             hDCBaseAndLoadingLoyaltyDiscount, 
+             hDCBaseAndLoadingEmployeeDiscount,
+             hDCBaseAndLoadingOnlineDiscount,
+             hDCBaseAndLoadingFamilyDiscount  
                      };
 
                     decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
@@ -2721,7 +2582,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? GST = (netPremium * 0.18m) ?? 0;
                     decimal? finalPremium = (netPremium + GST) ?? 0;
                     decimal? selectedUpsellPremium = row.upsellpremium1 ?? row.upsellpremium2 ?? row.upsellpremium3 ?? row.upsellpremium4 ?? row.upsellpremium5 ?? 0;
-                    upsellCrosscheck = (selectedUpsellPremium - finalPremium) ?? 0;
+                    upsellCrosscheck = (selectedUpsellPremium - finalPremium) ;
 
                     os = new OptimaSecureRNE
                     {
@@ -2745,16 +2606,16 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         txt_mobile = row.txt_mobile,
                         txt_telephone = row.txt_telephone,
                         txt_email = row.txt_email,
-                        txt_dealer_cd = row.txt_dealer_cd,//intermediary_code in gc mapping
-                        imdname = row.imdname,//intermediary_name in gc
-                        verticalname = row.verticalname,//psm_name in gc
-                                                        //ssm_name = row.ssm_name,
+                        txt_dealer_cd = row.txt_dealer_cd,
+                        imdname = row.imdname,
+                        verticalname = row.verticalname,
+                                                        
                         txt_family = row.txt_family,
-                        isrnflag = row.isrnflag,//chk
-                        reference_num = row.reference_num,//proposal no in gc
+                        isrnflag = row.isrnflag,
+                        reference_num = row.reference_num,
                         split_flag = row.split_flag,
-                        isvipflag = row.isvipflag,//chk 
-                        optima_secure_gst = /*row.GST,*/
+                        isvipflag = row.isvipflag,
+                        optima_secure_gst =
                     row.optima_secure_gst.HasValue ? Math.Round(row.optima_secure_gst.Value, 2) : (decimal?)null,
 
                         txt_insuredname1 = row.txt_insuredname1,
@@ -2770,7 +2631,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         txt_insuredname11 = row.txt_insuredname11,
                         txt_insuredname12 = row.txt_insuredname12,
 
-                        txt_insured_entrydate1 = row.txt_insured_entrydate1,//chk inceptiondate in gc
+                        txt_insured_entrydate1 = row.txt_insured_entrydate1,
                         txt_insured_entrydate2 = row.txt_insured_entrydate2,
                         txt_insured_entrydate3 = row.txt_insured_entrydate3,
                         txt_insured_entrydate4 = row.txt_insured_entrydate4,
@@ -2849,7 +2710,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         txt_insured_age11 = row.txt_insured_age11,
                         txt_insured_age12 = row.txt_insured_age12,
 
-                        txt_insured_relation1 = row.txt_insured_relation1,//coming as "string"
+                        txt_insured_relation1 = row.txt_insured_relation1,
                         txt_insured_relation2 = row.txt_insured_relation2,
                         txt_insured_relation3 = row.txt_insured_relation3,
                         txt_insured_relation4 = row.txt_insured_relation4,
@@ -3035,52 +2896,18 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         loading_premium = loadingPrem,
                         family_discount = (familyDiscountValue * 100),
                         dedcutable_discount = deductibleDiscountVal,
-
-                        //base_premium_1 = basePremium1,//chk
-                        //base_premium_2 = basePremium2,
-                        //base_premium_3 = basePremium3,
-                        //base_premium_4 = basePremium4,
-                        //base_premium_5 = basePremium5,
-                        //base_premium_6 = basePremium6,
-                        //base_premium_7 = basePremium7,
-                        //base_premium_8 = basePremium8,
-                        //base_premium_9 = basePremium9,
-                        //base_premium_10 = basePremium10,
-                        //base_premium_11 = basePremium11,
-                        //base_premium_12 = basePremium12,
+                     
                         base_premium = basePremium,
                         base_premium_after_deductible = basePremiumAfterDeductible,
-
-                        //first base loading
+                      
                         loading_premiums = loadingPremiumvalues,
-                        //loading_prem2 = loadingPrem2,
-                        //loading_prem3 = loadingPrem3,
-                        //loading_prem4 = loadingPrem4,
-                        //loading_prem5 = loadingPrem5,
-                        //loading_prem6 = loadingPrem6,
-                        //loading_prem7 = loadingPrem7,
-                        //loading_prem8 = loadingPrem8,
-                        //loading_prem9 = loadingPrem9,
-                        //loading_prem10 = loadingPrem10,
-                        //loading_prem11 = loadingPrem11,
-                        //loading_prem12 = loadingPrem12,
+                      
                         loading_prem_total = loadingPremium,
 
-                        //cash_benefit_loading_prem_1 = cashBenefitInsured_1,
-                        //cash_benefit_loading_prem_2 = cashBenefitInsured_2,
-                        //cash_benefit_loading_prem_3 = cashBenefitInsured_3,
-                        //cash_benefit_loading_prem_4 = cashBenefitInsured_4,
-                        //cash_benefit_loading_prem_5 = cashBenefitInsured_5,
-                        //cash_benefit_loading_prem_6 = cashBenefitInsured_6,
-                        //cash_benefit_loading_prem_7 = cashBenefitInsured_7,
-                        //cash_benefit_loading_prem_8 = cashBenefitInsured_8,
-                        //cash_benefit_loading_prem_9 = cashBenefitInsured_9,
-                        //cash_benefit_loading_prem_10 = cashBenefitInsured_10,
-                        //cash_benefit_loading_prem_11 = cashBenefitInsured_11,
-                        //cash_benefit_loading_prem_12 = loadingPrem12,
+                        
                         cash_benefit_loading_prem_total = cashBenefitLoadingPremium,
 
-                        baseAndLoading = BaseAndLoading,//chk all values coming 0
+                        baseAndLoading = BaseAndLoading,
                         baseAndLoading_LoyaltyDiscount = BaseAndLoadingLoyaltyDiscount,
                         baseAndLoading_EmployeeDiscount = BaseAndLoadingEmployeeDiscount,
                         baseAndLoading_OnlineDiscount = BaseAndLoadingOnlineDiscount,
@@ -3088,28 +2915,12 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         baseAndLoading_CombiDiscount = combiDiscount,
                         baseAndLoading_CapppedDiscount = cappedDiscount,
                         baseAndLoading_LongTermDiscount = longTermDiscount,
-                        //baseAndLoading_OS_Base_Premium = oSBasePremium,
+                       
                         baseAndLoading_OS_Base_Premium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null,
 
                         baseAndLoading_Unlimited_Restore = unlimitedRestore,
                         baseAndLoading_Final_Base_Premium = finalBasePremium,
-
-                        //cash benefit loading
-                        //loading_prem_1 = loadingPrem_1,
-                        //loading_prem_2 = loadingPrem_2,
-                        //loading_prem_3 = loadingPrem_3,
-                        //loading_prem_4 = loadingPrem_4,
-                        //loading_prem_5 = loadingPrem_5,
-                        //loading_prem_6 = loadingPrem_6,
-                        //loading_prem_7 = loadingPrem_7,
-                        //loading_prem_8 = loadingPrem_8,
-                        //loading_prem_9 = loadingPrem_9,
-                        //loading_prem_10 = loadingPrem_10,
-                        //loading_prem_11 = loadingPrem_11,
-                        //loading_prem_12 = loadingPrem_12,
-                        loading_prem = loadingPrem,
-
-
+                       loading_prem = loadingPrem,
                         hDCBaseAndLoading = hDCBaseAndLoading,
                         HDC_BaseCoverPremium = hDCBaseCoverPremium,
                         HDC_LoyaltyDiscount = hDCBaseAndLoadingLoyaltyDiscount,
@@ -3136,33 +2947,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         cash_Benefit_Family_Defn = familyDefn,
                         Cash_Benefit_Premium = cashBenefitPremium,
                         cash_Benefit_insuredList = premiumCheckInsuredValues,
-                        //cash_Benefit_insured_1 = Insured_1,
-                        //cash_Benefit_insured_2 = Insured_2,
-                        //cash_Benefit_insured_3 = Insured_3,
-                        //cash_Benefit_insured_4 = Insured_4,
-                        //cash_Benefit_insured_5 = Insured_5,
-                        //cash_Benefit_insured_6 = Insured_6,
-                        //cash_Benefit_insured_7 = Insured_7,
-                        //cash_Benefit_insured_8 = Insured_8,
-                        //cash_Benefit_insured_9 = Insured_9,
-                        //cash_Benefit_insured_10 = Insured_10,
-                        //cash_Benefit_insured_11 = Insured_11,
-                        //cash_Benefit_insured_12 = Insured_12,
+                   
                         cash_Benefit_Premium_Check = premiumCheck,
 
-                        //loading_insured_1 = cashBenefitInsured_1,
-                        //loading_insured_2 = cashBenefitInsured_2,
-                        //loading_insured_3 = cashBenefitInsured_3,
-                        //loading_insured_4 = cashBenefitInsured_4,
-                        //loading_insured_5 = cashBenefitInsured_5,
-                        //loading_insured_6 = cashBenefitInsured_6,
-                        //loading_insured_7 = cashBenefitInsured_7,
-                        //loading_insured_8 = cashBenefitInsured_8,
-                        //loading_insured_9 = cashBenefitInsured_9,
-                        //loading_insured_10 = cashBenefitInsured_10,
-                        //loading_insured_11 = cashBenefitInsured_11,
-                        //loading_insured_12 = cashBenefitInsured_12,
-
+                      
                         sum_insured1 = row.sum_insured1,
                         sum_insured2 = row.sum_insured2,
                         sum_insured3 = row.sum_insured3,
@@ -3176,33 +2964,16 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         sum_insured11 = row.sum_insured11,
                         sum_insured12 = row.sum_insured12,
 
-                        critical_Illness_AddOn_Premium = premium,//chk
+                        critical_Illness_AddOn_Premium = premium,
                         critical_Illness_Add_On_Opt = Opt,
                         critical_Illness_Add_On_SI = SI,
-                        //critical_Illness_Add_On_Premium1 = premium1,
-                        //critical_Illness_Add_On_Premium2 = premium2,
-                        //critical_Illness_Add_On_Premium3 = premium3,
-                        //critical_Illness_Add_On_Premium4 = premium4,
-                        //critical_Illness_Add_On_Premium5 = premium5,
-                        //critical_Illness_Add_On_Premium6 = premium6,
-                        //critical_Illness_Add_On_Premium7 = premium7,
-                        //critical_Illness_Add_On_Premium8 = premium8,
-                        //critical_Illness_Add_On_Premium9 = premium9,
-                        //critical_Illness_Add_On_Premium10 = premium10,
-                        //critical_Illness_Add_On_Premium11 = premium11,
-                        //critical_Illness_Add_On_Premium12 = premium12,
-                        critical_Illness_Add_On_PremiumList = premiums,
-                        // ci_Variant = CIVariant,
-
+                        
+                        critical_Illness_Add_On_PremiumList = premiums,  
                         cash_Benefit_Opt = Opt,
-
-
                         base_Loading_And_Discount_Final_BasePremium = BaseAndLoading,
                         base_Loading_And_Discount_Premium = finalBasePremium,
                         net_premium = row.num_net_premium,
                         final_Premium_upsell = finalPremium.HasValue ? Math.Round(finalPremium.Value, 2) : (decimal?)0,
-
-                        // netPremium = netPremium,
                         netPremium = netPremium.HasValue ? Math.Round(netPremium.Value, 2) : (decimal?)0,
                         GST = GST.HasValue ? Math.Round(GST.Value, 2) : (decimal?)0,
                         baseprem_cross_Check = baseCrosscheck,
@@ -3338,7 +3109,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             }
             return resultTable;
         }
-        // Method to calculate the premium
         private decimal CalculateLoadingPremium(decimal? insured_1, decimal? basicLoadingRateOne)
         {
             try
@@ -3369,17 +3139,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             return result;
         }
         static decimal? CalculateCappedDiscount(decimal?[] cappedDiscountValues, decimal? BaseAndLoading)
-        {
-            // Calculate the sum of values in the range C158:C161
-            decimal? sumOfDiscount = cappedDiscountValues.Sum();
-
-            // Calculate 20% of the value in C157
-            decimal? twentyPercentOfBaseAndLoading = BaseAndLoading * 0.20m;
-
-            // Return the minimum of the two calculated values
+        {         
+            decimal? sumOfDiscount = cappedDiscountValues.Sum();            
+            decimal? twentyPercentOfBaseAndLoading = BaseAndLoading * 0.20m;           
             return MinDecimal(sumOfDiscount, twentyPercentOfBaseAndLoading);
-        }
-        //// Custom method to find the minimum of two decimal values
+        }       
         static decimal? MinDecimal(decimal? a, decimal? b)
         {
             return (a < b) ? a : b;

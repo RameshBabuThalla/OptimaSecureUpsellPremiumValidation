@@ -15,28 +15,28 @@ using OptimaSecureUpsellPremiumValidation;
 using Serilog.Core;
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using System.Data;
+using Serilog.Events;
 
 var builder = Host.CreateDefaultBuilder(args);
-string logFilePath = @"C:\temp\OS_UPSELLLog\app_log.txt"; // Or any known writable directory
+string logFilePath = @"C:\temp\OS_UPSELLLog\app_log.txt";
 Directory.CreateDirectory(Path.GetDirectoryName(logFilePath));
 
 Log.Information("OS_UPSELL Application has started.");
 
-// Configure Serilog
 Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
-    .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")  // Customize console output
+    .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")  
     .WriteTo.File(logFilePath, rollingInterval: RollingInterval.Hour,
-                  outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")  // Customize file output format
+                  outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level}] {Message}{NewLine}{Exception}")
     .Filter.ByExcluding(logEvent =>
         logEvent.Properties.ContainsKey("SourceContext") &&
         logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") &&
         logEvent.Level == Serilog.Events.LogEventLevel.Information &&
         logEvent.MessageTemplate.Text.Contains("Executed DbCommand")  // Exclude logs that contain 'Executed DbCommand'
     )
+
     .CreateLogger();
 
 string connectionString = ConfigurationManager.ConnectionStrings["PostgresDb"]?.ConnectionString;
-
 
 if (string.IsNullOrEmpty(connectionString))
 {
@@ -44,20 +44,13 @@ if (string.IsNullOrEmpty(connectionString))
     return;
 }
 
-//// Configure Services & Dependency Injection
 builder.ConfigureServices((context, services) =>
-{
- 
+{ 
     services.AddLogging(configure => configure.AddSerilog());
-
-    services.AddSingleton<IDbConnection>(sp => new NpgsqlConnection(connectionString));
-
-    // Register DbContext with PostgreSQL
+    services.AddSingleton<IDbConnection>(sp => new NpgsqlConnection(connectionString));   
     services.AddDbContext<HDFCDbContext>(options =>
         options.UseNpgsql(connectionString));
-
-    services.AddTransient<OptimaSecure>();
-  
+    services.AddTransient<OptimaSecure>();  
     services.AddHostedService<MyWorker>();
 });
 
@@ -93,6 +86,7 @@ using (var postgresConnection = new NpgsqlConnection(postgresConnectionString))
             {
                 List<string> idPlaceholders = new List<string>();          
                 var listofpolicies = optimaSecure.FetchNewBatchIds(postgresConnection);
+            Console.Write("Listofpolicies" + " " + listofpolicies.Count);
             using (var scope = host.Services.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<HDFCDbContext>();
@@ -118,18 +112,18 @@ using (var postgresConnection = new NpgsqlConnection(postgresConnectionString))
                                 try
                                 {
                                     string certificateNo = item[0];                                   
-                                    var osRNEDataSecure = await optimaSecure.GetOptimaSecureValidation(certificateNo, baserates, relations, cirates, hdcrates, hdcproportionsplit, deductableDiscount);
+                                   await optimaSecure.GetOptimaSecureValidation(certificateNo, baserates, relations, cirates, hdcrates, hdcproportionsplit, deductableDiscount);
                                 }
                                 finally
                                 {
-                                    semaphore.Release();  // Release the semaphore after the task is done
+                                    semaphore.Release();  
                                 }
-                            });
-                            tasks.Add(task);
-                        }
-                        await System.Threading.Tasks.Task.WhenAll(tasks);
+                        });
+                        tasks.Add(task);
                     }
+                    await System.Threading.Tasks.Task.WhenAll(tasks);
                 }
+            }
             }
             }
             catch (Exception ex)
@@ -153,7 +147,7 @@ using (var postgresConnection = new NpgsqlConnection(postgresConnectionString))
 
 Console.WriteLine("Schedular is Completed!");
 Log.Information("Application has finished processing.");
-EmailService.SendEmail();
+//EmailService.SendEmail();
 Log.CloseAndFlush();
 
 
