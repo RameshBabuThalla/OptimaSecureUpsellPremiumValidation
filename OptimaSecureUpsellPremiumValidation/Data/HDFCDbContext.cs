@@ -165,7 +165,7 @@ namespace OptimaSecureUpsellPremiumValidation.Data
                 string dbConn = _configuration.GetConnectionString("DefaultConnection");
                 optionsBuilder
                    .UseNpgsql(dbConn)
-                    .EnableSensitiveDataLogging(); // Enables detailed error information
+                    .EnableSensitiveDataLogging(false); // Enables detailed error information
             }
         }
 
