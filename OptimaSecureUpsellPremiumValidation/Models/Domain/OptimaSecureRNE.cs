@@ -1157,8 +1157,5 @@ namespace OptimaSecureUpsellPremiumValidation.Models.Domain
         public decimal? final_Premium_upsell { get; set; }
         public decimal? baseprem_cross_Check { get; set; }
         public decimal? upsellbaseprem_cross_Check { get; set; }
-
-
-
     }
 }
