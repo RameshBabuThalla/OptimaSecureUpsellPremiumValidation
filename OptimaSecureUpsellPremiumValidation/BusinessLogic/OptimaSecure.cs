@@ -639,8 +639,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     }
                 }
             }
-            //var premiumvalues = await GetCrosscheckValue(policyNo, osRNEData);
-
             //Combine the result sets and send it in the response.
             //Note: To compute with base SI Premiums for Insureds.
             OptimaSecurePremiumValidationUpsell objOptimaSecurePremiumValidationUpSell = new OptimaSecurePremiumValidationUpsell
@@ -1119,11 +1117,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 GST = osRNEData.FirstOrDefault()?.GST.HasValue == true ?
                                   (decimal?)Math.Round(osRNEData.FirstOrDefault().GST.Value, 2)
                                   : (decimal?)null,                
-                //cross_Check1 = osRNEDataUpSell.FirstOrDefault()?.baseprem_cross_Check ?? 0,
-                //cross_Check2 = osRNEDataUpSell.FirstOrDefault()?.upsellbaseprem_cross_Check.HasValue == true
-                //              ? (decimal?)Math.Round(osRNEDataUpSell.FirstOrDefault().crossCheck.Value, 2)
-                //              : (decimal?)null,
-
+               
                 //upsell premiums and sum insureds
                 upsell_sum_insured1 = osRNEDataUpSell.FirstOrDefault()?.sum_insured1,
                 upsell_sum_insured2 = osRNEDataUpSell.FirstOrDefault()?.sum_insured2,
@@ -1161,11 +1155,12 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 var record_idst = dbConnection.QueryFirstOrDefault<premium_validation>(
                     "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
                     new { CertificateNo = policyNo });
-
+                
                 if (record_idst == null)
                 {
                     if (objOptimaSecurePremiumValidationUpSell.insured_cb1 == string.Empty && objOptimaSecurePremiumValidationUpSell.insured_cb1 == null)
                     {
+                        Console.WriteLine($"Inserting data for Policy No: {policyNo}");
                         var insertQuery = @"
                     INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status)
                     VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - No CB', 'CB SI cannot be zero')";
@@ -1177,6 +1172,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             VerifiedGst = gst,
                             VerifiedTotalPrem = finalPremium
                         });
+                        Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
                         //record_idst.rn_generation_status = "IT Issue - No CB";
                         //record_idst.error_description = "CB SI cannot be zero";
                         // Update the existing record
@@ -1210,11 +1206,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                        
                     }
                 }
-
-                // Check if the record exists by selecting only required columns
-                //var record = dbConnection.QueryFirstOrDefault<rne_calculated_cover_rg>(
-                //    "SELECT certificate_no FROM ins.rne_calculated_cover_rg WHERE policy_number = @CertificateNo",
-                //    new { CertificateNo = policyNo });                
+               
                 if (objOptimaSecurePremiumValidationUpSell != null)
                 {
                     var no_of_members = objOptimaSecurePremiumValidationUpSell.no_of_members;
@@ -1258,7 +1250,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         newRecord.Add(newRecord1);
                         newRecord.Add(newRecord2);
                     }
-
                     for (int j = 1; j <= ridercount; j++)
                     {
                         //var riderSumInsured = Convert.ToDecimal(objOptimaSecurePremiumValidationUpSell.GetType().GetProperty($"criticalAdvantageRider_SumInsured_{j}")?.GetValue(objOptimaSecurePremiumValidationUpSell));
@@ -1280,7 +1271,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             };
                             newRecord.Add(riderRecord);
                         }
-
                         //to print Protector Rider
                         if (riderPremiumpr > 0)
                         {
@@ -1295,8 +1285,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             };
                             newRecord.Add(riderRecordpr);
                         }
-
-                        //// to print Unlimited Restore
+                        // to print Unlimited Restore
                         if (riderPremiumur > 0)
                         {
                             var riderRecordur = new rne_calculated_cover_rg
@@ -1316,11 +1305,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
     VALUES (@policy_number, @referencenum, @suminsured, @premium, @totalpremium, @riskname, @covername, @isupsell);
     ";
 
-                    // Using ExecuteAsync for asynchronous execution
                     await dbConnection.ExecuteAsync(insertQuery, newRecord).ConfigureAwait(false);
-                    //dbContext.rne_calculated_cover_rg.AddRange(newRecord);
-                    //await dbContext.SaveChangesAsync();
-
                 }
 
                 return objOptimaSecurePremiumValidationUpSell;
@@ -1332,7 +1317,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             using (IDbConnection dbConnection = new NpgsqlConnection(connectionString))
             {
                 dbConnection.Open();
-                // Check if the record exists by selecting only required columns
                 var record = dbConnection.QueryFirstOrDefault<premium_validation>(
                     "SELECT certificate_no FROM ins.premium_validation WHERE certificate_no = @CertificateNo",
                     new { CertificateNo = policyNo.ToString() });
@@ -1375,12 +1359,13 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                 if (record == null)
                 {
-                    decimal crosscheck1Value = crosscheck1.HasValue ? crosscheck1.Value : 0;
-                    decimal crosscheck2Value = crosscheck2.HasValue ? crosscheck2.Value : 0;
-                    if (crosscheck1.HasValue && crosscheck2.HasValue)
+                    decimal crosscheck1Value = crosscheck1.GetValueOrDefault(0); 
+                    decimal crosscheck2Value = crosscheck2.GetValueOrDefault(0); 
+                    if (crosscheck1Value != 0 && crosscheck2Value != 0)
                     {
-                        if ((Math.Abs(crosscheck1.Value) <= 10) || ((Math.Abs(crosscheck1.Value) <= 10 && Math.Abs(crosscheck2Value) <= 10)))
+                        if ((Math.Abs(crosscheck1Value) <= 10) || ((Math.Abs(crosscheck1Value) <= 10 && Math.Abs(crosscheck2Value) <= 10)))
                         {
+                            Console.WriteLine($"Inserting data for Policy No: {policyNo}");
                             var insertQuery = @"
                     INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status)
                     VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'RN Generation Awaited', 'RN Generation Awaited', 'PDF Gen Under Process With CLICK PSS Team')";
@@ -1392,12 +1377,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                 VerifiedGst = gst,
                                 VerifiedTotalPrem = finalPremium
                             });
-                            //record.rn_generation_status = "RN Generation Awaited";
-                            //record.final_remarks = "RN Generation Awaited";
-                            //record.dispatch_status = "PDF Gen Under Process With CLICK PSS Team";
+                            Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
                         }
-                        else if ((Math.Abs(crosscheck1.Value) > 10) || (Math.Abs(crosscheck1.Value) > 10 && Math.Abs(crosscheck2Value) <= 10))
+                        else if ((Math.Abs(crosscheck1Value) > 10) || (Math.Abs(crosscheck1Value) > 10 && Math.Abs(crosscheck2Value) <= 10))
                         {
+                            Console.WriteLine($"Inserting data for Policy No: {policyNo}");
                             var insertQuery = @"
                             INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status, error_description)
                             VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - QC Failed', 'IT Issues', 'Revised Extraction REQ From IT Team QC Failed Cases', 'Premium verification failed due to premium difference of more than 10 rupees')";
@@ -1409,13 +1393,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                 VerifiedGst = gst,
                                 VerifiedTotalPrem = finalPremium,
                             });
-                            //record.rn_generation_status = "IT Issue - QC Failed";
-                            //record.final_remarks = "IT Issues";
-                            //record.dispatch_status = "Revised Extraction REQ From IT Team QC Failed Cases";
-                            //record.error_description = "Premium verification failed due to premium difference of more than 10 rupees";
+                            Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
                         }
-                        else if (Math.Abs(crosscheck1.Value) <= 10 && Math.Abs(crosscheck2Value) > 10)
+                        else if (Math.Abs(crosscheck1Value) <= 10 && Math.Abs(crosscheck2Value) > 10)
                         {
+                            Console.WriteLine($"Inserting data for Policy No: {policyNo}");
                             var insertQuery = @"
                             INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status, error_description)
                             VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - Upsell QC Failed')";
@@ -1427,13 +1409,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                 VerifiedGst = gst,
                                 VerifiedTotalPrem = finalPremium,
                             });
-
-                            //record.rn_generation_status = "IT Issue - Upsell QC Failed";
+                            Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
                         }
-                        else if (Math.Abs(crosscheck1.Value) > 10 && Math.Abs(crosscheck2Value) > 10)
+                        else if (Math.Abs(crosscheck1Value) > 10 && Math.Abs(crosscheck2Value) > 10)
                         {
-                            // record.rn_generation_status = "IT Issue - QC Failed";
-
+                            Console.WriteLine($"Inserting data for Policy No: {policyNo}");
                             var insertQuery = @"
                             INSERT INTO ins.premium_validation (certificate_no, verified_prem, verified_gst, verified_total_prem, rn_generation_status, final_remarks, dispatch_status, error_description)
                             VALUES (@CertificateNo, @VerifiedPrem, @VerifiedGst, @VerifiedTotalPrem, 'IT Issue - QC Failed')";
@@ -1445,6 +1425,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                                 VerifiedGst = gst,
                                 VerifiedTotalPrem = finalPremium,
                             });
+                            Console.WriteLine($"Inserted data for Policy No: {policyNo}.");
                         }
                     }
                  
@@ -1452,603 +1433,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 
             }
         }
-
-        //private async Task<IEnumerable<OptimaSecureRNE>> GetGCOptimaSecureDataAsync(string policyNo, ILogger _logger, HDFCDbContext dbContext, int pageNumber, int pageSize)
-        //{            
-        //    var osRNEData = await (
-        //    from os in dbContext.rne_healthtab
-        //    join osidst in dbContext.idst_renewal_data_rgs on os.policy_number equals osidst.certificate_no
-        //    where (os.policy_number == policyNo)
-        //    select new OptimaSecureRNE
-        //    {
-        //        prod_code = os.prod_code,
-        //        batchid = os.batchid,
-        //        reference_num = os.reference_num,
-        //        prod_name = os.prod_name,
-        //        policy_number = os.policy_number,
-        //        split_flag = os.split_flag,
-        //        customer_id = os.customer_id,
-        //        customername = os.customername,
-        //        verticalname = os.verticalname,//psm name in old gc mapping
-        //        policy_start_date = os.policy_start_date,
-        //        policy_expiry_date = os.policy_expiry_date,
-        //        policy_period = os.policy_period,
-        //        tier_type = os.tier_type,//tier in old gc mapping
-        //        policyplan = os.policyplan,
-        //        policy_type = os.policy_type,
-        //        txt_family = os.txt_family,//family size in old gc mapping
-        //        claimcount = os.claimcount,
-        //        num_tot_premium = os.num_tot_premium,
-        //        num_net_premium = os.num_net_premium,
-        //        optima_secure_gst = os.num_service_tax,
-               
-        //        txt_insured_entrydate1 = os.txt_insured_entrydate1,
-        //        txt_insured_entrydate2 = os.txt_insured_entrydate2,
-        //        txt_insured_entrydate3 = os.txt_insured_entrydate3,
-        //        txt_insured_entrydate4 = os.txt_insured_entrydate4,
-        //        txt_insured_entrydate5 = os.txt_insured_entrydate5,
-        //        txt_insured_entrydate6 = os.txt_insured_entrydate6,
-        //        txt_insured_entrydate7 = os.txt_insured_entrydate7,
-        //        txt_insured_entrydate8 = os.txt_insured_entrydate8,
-        //        txt_insured_entrydate9 = os.txt_insured_entrydate9,
-        //        txt_insured_entrydate10 = os.txt_insured_entrydate10,
-        //        txt_insured_entrydate11 = os.txt_insured_entrydate11,
-        //        txt_insured_entrydate12 = os.txt_insured_entrydate12,
-
-        //        coverbaseloadingrate1 = os.coverbaseloadingrate1,
-        //        coverbaseloadingrate2 = os.coverbaseloadingrate2,
-        //        coverbaseloadingrate3 = os.coverbaseloadingrate3,
-        //        coverbaseloadingrate4 = os.coverbaseloadingrate4,
-        //        coverbaseloadingrate5 = os.coverbaseloadingrate5,
-        //        coverbaseloadingrate6 = os.coverbaseloadingrate6,
-        //        coverbaseloadingrate7 = os.coverbaseloadingrate7,
-        //        coverbaseloadingrate8 = os.coverbaseloadingrate8,
-        //        coverbaseloadingrate9 = os.coverbaseloadingrate9,
-        //        coverbaseloadingrate10 = os.coverbaseloadingrate10,
-        //        coverbaseloadingrate11 = os.coverbaseloadingrate11,
-        //        coverbaseloadingrate12 = os.coverbaseloadingrate12,
-
-        //        insured_loadingper1 = osidst.loading_per_insured1,
-        //        insured_loadingper2 = osidst.loading_per_insured2,
-        //        insured_loadingper3 = osidst.loading_per_insured3,
-        //        insured_loadingper4 = osidst.loading_per_insured4,
-        //        insured_loadingper5 = osidst.loading_per_insured5,
-        //        insured_loadingper6 = osidst.loading_per_insured6,
-        //        insured_loadingper7 = osidst.loading_per_insured7,
-        //        insured_loadingper8 = osidst.loading_per_insured8,
-        //        insured_loadingper9 = osidst.loading_per_insured9,
-        //        insured_loadingper10 = osidst.loading_per_insured10,
-        //        insured_loadingper11 = osidst.loading_per_insured11,
-        //        insured_loadingper12 = osidst.loading_per_insured12,
-
-        //        insured_loadingamt1 = os.insured_loadingamt1,
-        //        insured_loadingamt2 = os.insured_loadingamt2,
-        //        insured_loadingamt3 = os.insured_loadingamt3,
-        //        insured_loadingamt4 = os.insured_loadingamt4,
-        //        insured_loadingamt5 = os.insured_loadingamt5,
-        //        insured_loadingamt6 = os.insured_loadingamt6,
-        //        insured_loadingamt7 = os.insured_loadingamt7,
-        //        insured_loadingamt8 = os.insured_loadingamt8,
-        //        insured_loadingamt9 = os.insured_loadingamt9,
-        //        insured_loadingamt10 = os.insured_loadingamt10,
-        //        insured_loadingamt11 = os.insured_loadingamt11,
-        //        insured_loadingamt12 = os.insured_loadingamt12,
-
-        //        txt_insuredname1 = os.txt_insuredname1,
-        //        txt_insuredname2 = os.txt_insuredname2,
-        //        txt_insuredname3 = os.txt_insuredname3,
-        //        txt_insuredname4 = os.txt_insuredname4,
-        //        txt_insuredname5 = os.txt_insuredname5,
-        //        txt_insuredname6 = os.txt_insuredname6,
-        //        txt_insuredname7 = os.txt_insuredname7,
-        //        txt_insuredname8 = os.txt_insuredname8,
-        //        txt_insuredname9 = os.txt_insuredname9,
-        //        txt_insuredname10 = os.txt_insuredname10,
-        //        txt_insuredname11 = os.txt_insuredname11,
-        //        txt_insuredname12 = os.txt_insuredname12,
-
-        //        txt_insured_relation1 = os.txt_insured_relation1,
-        //        txt_insured_relation2 = os.txt_insured_relation2,
-        //        txt_insured_relation3 = os.txt_insured_relation3,
-        //        txt_insured_relation4 = os.txt_insured_relation4,
-        //        txt_insured_relation5 = os.txt_insured_relation5,
-        //        txt_insured_relation6 = os.txt_insured_relation6,
-        //        txt_insured_relation7 = os.txt_insured_relation7,
-        //        txt_insured_relation8 = os.txt_insured_relation8,
-        //        txt_insured_relation9 = os.txt_insured_relation9,
-        //        txt_insured_relation10 = os.txt_insured_relation10,
-        //        txt_insured_relation11 = os.txt_insured_relation11,
-        //        txt_insured_relation12 = os.txt_insured_relation12,
-
-        //        txt_insured_age1 = os.txt_insured_age1,
-        //        txt_insured_age2 = os.txt_insured_age2,
-        //        txt_insured_age3 = os.txt_insured_age3,
-        //        txt_insured_age4 = os.txt_insured_age4,
-        //        txt_insured_age5 = os.txt_insured_age5,
-        //        txt_insured_age6 = os.txt_insured_age6,
-        //        txt_insured_age7 = os.txt_insured_age7,
-        //        txt_insured_age8 = os.txt_insured_age8,
-        //        txt_insured_age9 = os.txt_insured_age9,
-        //        txt_insured_age10 = os.txt_insured_age10,
-        //        txt_insured_age11 = os.txt_insured_age11,
-        //        txt_insured_age12 = os.txt_insured_age12,
-
-        //        member_id1 = os.member_id1,
-        //        member_id2 = os.member_id2,
-        //        member_id3 = os.member_id3,
-        //        member_id4 = os.member_id4,
-        //        member_id5 = os.member_id5,
-        //        member_id6 = os.member_id6,
-        //        member_id7 = os.member_id7,
-        //        member_id8 = os.member_id8,
-        //        member_id9 = os.member_id9,
-        //        member_id10 = os.member_id10,
-        //        member_id11 = os.member_id11,
-        //        member_id12 = os.member_id12,
-
-        //        pollddesc1 = os.pollddesc1,
-        //        pollddesc2 = os.pollddesc2,
-        //        pollddesc3 = os.pollddesc3,
-        //        pollddesc4 = os.pollddesc4,
-        //        pollddesc5 = os.pollddesc5,
-
-        //        upselltype1 = os.upselltype1,
-        //        upselltype2 = os.upselltype2,
-        //        upselltype3 = os.upselltype3,
-        //        upselltype4 = os.upselltype4,
-        //        upselltype5 = os.upselltype5,
-
-        //        upsellvalue1 = os.upsellvalue1,
-        //        upsellvalue2 = os.upsellvalue2,
-        //        upsellvalue3 = os.upsellvalue3,
-        //        upsellvalue4 = os.upsellvalue4,
-        //        upsellvalue5 = os.upsellvalue5,
-
-        //        upsellpremium1 = os.upsellpremium1,
-        //        upsellpremium2 = os.upsellpremium2,
-        //        upsellpremium3 = os.upsellpremium3,
-        //        upsellpremium4 = os.upsellpremium4,
-        //        upsellpremium5 = os.upsellpremium5,
-
-        //        sum_insured1 = os.sum_insured1,
-        //        sum_insured2 = os.sum_insured2,
-        //        sum_insured3 = os.sum_insured3,
-        //        sum_insured4 = os.sum_insured4,
-        //        sum_insured5 = os.sum_insured5,
-        //        sum_insured6 = os.sum_insured6,
-        //        sum_insured7 = os.sum_insured7,
-        //        sum_insured8 = os.sum_insured8,
-        //        sum_insured9 = os.sum_insured9,
-        //        sum_insured10 = os.sum_insured10,
-        //        sum_insured11 = os.sum_insured11,
-        //        sum_insured12 = os.sum_insured12,
-
-        //        insured_cb1 = os.insured_cb1,
-        //        insured_cb2 = os.insured_cb2,
-        //        insured_cb3 = os.insured_cb3,
-        //        insured_cb4 = os.insured_cb4,
-        //        insured_cb5 = os.insured_cb5,
-        //        insured_cb6 = os.insured_cb6,
-        //        insured_cb7 = os.insured_cb7,
-        //        insured_cb8 = os.insured_cb8,
-        //        insured_cb9 = os.insured_cb9,
-        //        insured_cb10 = os.insured_cb10,
-        //        insured_cb11 = os.insured_cb11,
-        //        insured_cb12 = os.insured_cb12,
-
-        //        insured_deductable1 = os.insured_deductable1,
-        //        insured_deductable2 = os.insured_deductable2,
-        //        insured_deductable3 = os.insured_deductable3,
-        //        insured_deductable4 = os.insured_deductable4,
-        //        insured_deductable5 = os.insured_deductable5,
-        //        insured_deductable6 = os.insured_deductable6,
-        //        insured_deductable7 = os.insured_deductable7,
-        //        insured_deductable8 = os.insured_deductable8,
-        //        insured_deductable9 = os.insured_deductable9,
-        //        insured_deductable10 = os.insured_deductable10,
-        //        insured_deductable11 = os.insured_deductable11,
-        //        insured_deductable12 = os.insured_deductable12,
-
-        //        covername11 = os.covername11,
-        //        covername12 = os.covername12,
-        //        covername13 = os.covername13,
-        //        covername14 = os.covername14,
-        //        covername15 = os.covername15,
-        //        covername16 = os.covername16,
-        //        covername17 = os.covername17,
-        //        covername18 = os.covername18,
-        //        covername19 = os.covername19,
-        //        covername21 = os.covername21,
-        //        covername22 = os.covername22,
-        //        covername23 = os.covername23,
-        //        covername24 = os.covername24,
-        //        covername25 = os.covername25,
-        //        covername26 = os.covername26,
-        //        covername27 = os.covername27,
-        //        covername28 = os.covername28,
-        //        covername29 = os.covername29,
-        //        covername31 = os.covername31,
-        //        covername32 = os.covername32,
-        //        covername33 = os.covername33,
-        //        covername34 = os.covername34,
-        //        covername35 = os.covername35,
-        //        covername36 = os.covername36,
-        //        covername37 = os.covername37,
-        //        covername38 = os.covername38,
-        //        covername39 = os.covername39,
-        //        covername41 = os.covername41,
-        //        covername42 = os.covername42,
-        //        covername43 = os.covername43,
-        //        covername44 = os.covername44,
-        //        covername45 = os.covername45,
-        //        covername46 = os.covername46,
-        //        covername47 = os.covername47,
-        //        covername48 = os.covername48,
-        //        covername49 = os.covername49,
-        //        covername51 = os.covername51,
-        //        covername52 = os.covername52,
-        //        covername53 = os.covername53,
-        //        covername54 = os.covername54,
-        //        covername55 = os.covername55,
-        //        covername56 = os.covername56,
-        //        covername57 = os.covername57,
-        //        covername58 = os.covername58,
-        //        covername59 = os.covername59,
-        //        covername61 = os.covername61,
-        //        covername62 = os.covername62,
-        //        covername63 = os.covername63,
-        //        covername64 = os.covername64,
-        //        covername65 = os.covername65,
-        //        covername66 = os.covername66,
-        //        covername67 = os.covername67,
-        //        covername68 = os.covername68,
-        //        covername69 = os.covername69,
-        //        covername71 = os.covername71,
-        //        covername72 = os.covername72,
-        //        covername73 = os.covername73,
-        //        covername74 = os.covername74,
-        //        covername75 = os.covername75,
-        //        covername76 = os.covername76,
-        //        covername77 = os.covername77,
-        //        covername78 = os.covername78,
-        //        covername79 = os.covername79,
-        //        covername81 = os.covername81,
-        //        covername82 = os.covername82,
-        //        covername83 = os.covername83,
-        //        covername84 = os.covername84,
-        //        covername85 = os.covername85,
-        //        covername86 = os.covername86,
-        //        covername87 = os.covername87,
-        //        covername88 = os.covername88,
-        //        covername89 = os.covername89,
-        //        covername91 = os.covername91,
-        //        covername92 = os.covername92,
-        //        covername93 = os.covername93,
-        //        covername94 = os.covername94,
-        //        covername95 = os.covername95,
-        //        covername96 = os.covername96,
-        //        covername97 = os.covername97,
-        //        covername98 = os.covername98,
-        //        covername99 = os.covername99,
-        //        covername101 = os.covername101,
-        //        covername102 = os.covername102,
-        //        covername103 = os.covername103,
-        //        covername104 = os.covername104,
-        //        covername105 = os.covername105,
-        //        covername106 = os.covername106,
-        //        covername107 = os.covername107,
-        //        covername108 = os.covername108,
-        //        covername109 = os.covername109,
-        //        covername110 = os.covername110,
-        //        covername210 = os.covername210,
-        //        covername310 = os.covername310,
-        //        covername410 = os.covername410,
-        //        covername510 = os.covername510,
-        //        covername610 = os.covername610,
-        //        covername710 = os.covername710,
-        //        covername810 = os.covername810,
-        //        covername910 = os.covername910,
-        //        covername1010 = os.covername1010,
-
-        //        coversi11 = os.coversi11,
-        //        coversi12 = os.coversi12,
-        //        coversi13 = os.coversi13,
-        //        coversi14 = os.coversi14,
-        //        coversi15 = os.coversi15,
-        //        coversi16 = os.coversi16,
-        //        coversi17 = os.coversi17,
-        //        coversi18 = os.coversi18,
-        //        coversi19 = os.coversi19,
-        //        coversi21 = os.coversi21,
-        //        coversi22 = os.coversi22,
-        //        coversi23 = os.coversi23,
-        //        coversi24 = os.coversi24,
-        //        coversi25 = os.coversi25,
-        //        coversi26 = os.coversi26,
-        //        coversi27 = os.coversi27,
-        //        coversi28 = os.coversi28,
-        //        coversi29 = os.coversi29,
-        //        coversi31 = os.coversi31,
-        //        coversi32 = os.coversi32,
-        //        coversi33 = os.coversi33,
-        //        coversi34 = os.coversi34,
-        //        coversi35 = os.coversi35,
-        //        coversi36 = os.coversi36,
-        //        coversi37 = os.coversi37,
-        //        coversi38 = os.coversi38,
-        //        coversi39 = os.coversi39,
-        //        coversi41 = os.coversi41,
-        //        coversi42 = os.coversi42,
-        //        coversi43 = os.coversi43,
-        //        coversi44 = os.coversi44,
-        //        coversi45 = os.coversi46,
-        //        coversi47 = os.coversi47,
-        //        coversi48 = os.coversi48,
-        //        coversi49 = os.coversi49,
-        //        coversi51 = os.coversi51,
-        //        coversi52 = os.coversi52,
-        //        coversi53 = os.coversi53,
-        //        coversi54 = os.coversi54,
-        //        coversi55 = os.coversi55,
-        //        coversi56 = os.coversi56,
-        //        coversi57 = os.coversi57,
-        //        coversi58 = os.coversi58,
-        //        coversi59 = os.coversi59,
-        //        coversi61 = os.coversi61,
-        //        coversi62 = os.coversi62,
-        //        coversi63 = os.coversi63,
-        //        coversi64 = os.coversi64,
-        //        coversi65 = os.coversi65,
-        //        coversi66 = os.coversi66,
-        //        coversi67 = os.coversi67,
-        //        coversi68 = os.coversi68,
-        //        coversi69 = os.coversi69,
-        //        coversi71 = os.coversi71,
-        //        coversi72 = os.coversi72,
-        //        coversi73 = os.coversi73,
-        //        coversi74 = os.coversi74,
-        //        coversi75 = os.coversi75,
-        //        coversi76 = os.coversi76,
-        //        coversi77 = os.coversi77,
-        //        coversi78 = os.coversi78,
-        //        coversi79 = os.coversi79,
-        //        coversi81 = os.coversi81,
-        //        coversi82 = os.coversi82,
-        //        coversi83 = os.coversi83,
-        //        coversi84 = os.coversi84,
-        //        coversi85 = os.coversi85,
-        //        coversi86 = os.coversi86,
-        //        coversi87 = os.coversi87,
-        //        coversi88 = os.coversi88,
-        //        coversi89 = os.coversi89,
-        //        coversi91 = os.coversi91,
-        //        coversi92 = os.coversi92,
-        //        coversi93 = os.coversi93,
-        //        coversi94 = os.coversi94,
-        //        coversi95 = os.coversi95,
-        //        coversi96 = os.coversi96,
-        //        coversi97 = os.coversi97,
-        //        coversi98 = os.coversi98,
-        //        coversi99 = os.coversi99,
-        //        coversi101 = os.coversi101,
-        //        coversi102 = os.coversi102,
-        //        coversi103 = os.coversi103,
-        //        coversi104 = os.coversi104,
-        //        coversi105 = os.coversi105,
-        //        coversi106 = os.coversi106,
-        //        coversi107 = os.coversi107,
-        //        coversi108 = os.coversi108,
-        //        coversi109 = os.coversi109,
-        //        coversi210 = os.coversi210,
-        //        coversi310 = os.coversi310,
-        //        coversi410 = os.coversi410,
-        //        coversi510 = os.coversi510,
-        //        coversi610 = os.coversi610,
-        //        coversi810 = os.coversi810,
-        //        coversi910 = os.coversi910,
-        //        coversi1010 = os.coversi1010,
-
-        //        coverprem11 = os.coverprem11,
-        //        coverprem12 = os.coverprem12,
-        //        coverprem13 = os.coverprem13,
-        //        coverprem14 = os.coverprem14,
-        //        coverprem15 = os.coverprem15,
-        //        coverprem16 = os.coverprem16,
-        //        coverprem17 = os.coverprem17,
-        //        coverprem18 = os.coverprem18,
-        //        coverprem19 = os.coverprem19,
-        //        coverprem21 = os.coverprem21,
-        //        coverprem22 = os.coverprem22,
-        //        coverprem23 = os.coverprem23,
-        //        coverprem24 = os.coverprem24,
-        //        coverprem25 = os.coverprem25,
-        //        coverprem26 = os.coverprem26,
-        //        coverprem27 = os.coverprem27,
-        //        coverprem28 = os.coverprem28,
-        //        coverprem29 = os.coverprem29,
-        //        coverprem31 = os.coverprem31,
-        //        coverprem32 = os.coverprem32,
-        //        coverprem33 = os.coverprem33,
-        //        coverprem34 = os.coverprem34,
-        //        coverprem35 = os.coverprem35,
-        //        coverprem36 = os.coverprem36,
-        //        coverprem37 = os.coverprem37,
-        //        coverprem38 = os.coverprem38,
-        //        coverprem39 = os.coverprem39,
-        //        coverprem41 = os.coverprem41,
-        //        coverprem42 = os.coverprem42,
-        //        coverprem43 = os.coverprem43,
-        //        coverprem44 = os.coverprem44,
-        //        coverprem45 = os.coverprem46,
-        //        coverprem47 = os.coverprem47,
-        //        coverprem48 = os.coverprem48,
-        //        coverprem49 = os.coverprem49,
-        //        coverprem51 = os.coverprem51,
-        //        coverprem52 = os.coverprem52,
-        //        coverprem53 = os.coverprem53,
-        //        coverprem54 = os.coverprem54,
-        //        coverprem55 = os.coverprem55,
-        //        coverprem56 = os.coverprem56,
-        //        coverprem57 = os.coverprem57,
-        //        coverprem58 = os.coverprem58,
-        //        coverprem59 = os.coverprem59,
-        //        coverprem61 = os.coverprem61,
-        //        coverprem62 = os.coverprem62,
-        //        coverprem63 = os.coverprem63,
-        //        coverprem64 = os.coverprem64,
-        //        coverprem65 = os.coverprem65,
-        //        coverprem66 = os.coverprem66,
-        //        coverprem67 = os.coverprem67,
-        //        coverprem68 = os.coverprem68,
-        //        coverprem69 = os.coverprem69,
-        //        coverprem71 = os.coverprem71,
-        //        coverprem72 = os.coverprem72,
-        //        coverprem73 = os.coverprem73,
-        //        coverprem74 = os.coverprem74,
-        //        coverprem75 = os.coverprem75,
-        //        coverprem76 = os.coverprem76,
-        //        coverprem77 = os.coverprem77,
-        //        coverprem78 = os.coverprem78,
-        //        coverprem79 = os.coverprem79,
-        //        coverprem81 = os.coverprem81,
-        //        coverprem82 = os.coverprem82,
-        //        coverprem83 = os.coverprem83,
-        //        coverprem84 = os.coverprem84,
-        //        coverprem85 = os.coverprem85,
-        //        coverprem86 = os.coverprem86,
-        //        coverprem87 = os.coverprem87,
-        //        coverprem88 = os.coverprem88,
-        //        coverprem89 = os.coverprem89,
-        //        coverprem91 = os.coverprem91,
-        //        coverprem92 = os.coverprem92,
-        //        coverprem93 = os.coverprem93,
-        //        coverprem94 = os.coverprem94,
-        //        coverprem95 = os.coverprem95,
-        //        coverprem96 = os.coverprem96,
-        //        coverprem97 = os.coverprem97,
-        //        coverprem98 = os.coverprem98,
-        //        coverprem99 = os.coverprem99,
-        //        coverprem101 = os.coverprem101,
-        //        coverprem102 = os.coverprem102,
-        //        coverprem103 = os.coverprem103,
-        //        coverprem104 = os.coverprem104,
-        //        coverprem105 = os.coverprem105,
-        //        coverprem106 = os.coverprem106,
-        //        coverprem107 = os.coverprem107,
-        //        coverprem108 = os.coverprem108,
-        //        coverprem109 = os.coverprem109,
-        //        coverprem210 = os.coverprem210,
-        //        coverprem310 = os.coverprem310,
-        //        coverprem410 = os.coverprem410,
-        //        coverprem510 = os.coverprem510,
-        //        coverprem610 = os.coverprem610,
-        //        coverprem810 = os.coverprem810,
-        //        coverprem910 = os.coverprem910,
-        //        coverprem1010 = os.coverprem1010,
-
-        //        coverloadingrate11 = os.coverloadingrate11,
-        //        coverloadingrate12 = os.coverloadingrate12,
-        //        coverloadingrate13 = os.coverloadingrate13,
-        //        coverloadingrate14 = os.coverloadingrate14,
-        //        coverloadingrate15 = os.coverloadingrate15,
-        //        coverloadingrate16 = os.coverloadingrate16,
-        //        coverloadingrate17 = os.coverloadingrate17,
-        //        coverloadingrate18 = os.coverloadingrate18,
-        //        coverloadingrate19 = os.coverloadingrate19,
-        //        coverloadingrate21 = os.coverloadingrate21,
-        //        coverloadingrate22 = os.coverloadingrate22,
-        //        coverloadingrate23 = os.coverloadingrate23,
-        //        coverloadingrate24 = os.coverloadingrate24,
-        //        coverloadingrate25 = os.coverloadingrate25,
-        //        coverloadingrate26 = os.coverloadingrate26,
-        //        coverloadingrate27 = os.coverloadingrate27,
-        //        coverloadingrate28 = os.coverloadingrate28,
-        //        coverloadingrate29 = os.coverloadingrate29,
-        //        coverloadingrate31 = os.coverloadingrate31,
-        //        coverloadingrate32 = os.coverloadingrate32,
-        //        coverloadingrate33 = os.coverloadingrate33,
-        //        coverloadingrate34 = os.coverloadingrate34,
-        //        coverloadingrate35 = os.coverloadingrate35,
-        //        coverloadingrate36 = os.coverloadingrate36,
-        //        coverloadingrate37 = os.coverloadingrate37,
-        //        coverloadingrate38 = os.coverloadingrate38,
-        //        coverloadingrate39 = os.coverloadingrate39,
-        //        coverloadingrate41 = os.coverloadingrate41,
-        //        coverloadingrate42 = os.coverloadingrate42,
-        //        coverloadingrate43 = os.coverloadingrate43,
-        //        coverloadingrate44 = os.coverloadingrate44,
-        //        coverloadingrate45 = os.coverloadingrate46,
-        //        coverloadingrate47 = os.coverloadingrate47,
-        //        coverloadingrate48 = os.coverloadingrate48,
-        //        coverloadingrate49 = os.coverloadingrate49,
-        //        coverloadingrate51 = os.coverloadingrate51,
-        //        coverloadingrate52 = os.coverloadingrate52,
-        //        coverloadingrate53 = os.coverloadingrate53,
-        //        coverloadingrate54 = os.coverloadingrate54,
-        //        coverloadingrate55 = os.coverloadingrate55,
-        //        coverloadingrate56 = os.coverloadingrate56,
-        //        coverloadingrate57 = os.coverloadingrate57,
-        //        coverloadingrate58 = os.coverloadingrate58,
-        //        coverloadingrate59 = os.coverloadingrate59,
-        //        coverloadingrate61 = os.coverloadingrate61,
-        //        coverloadingrate62 = os.coverloadingrate62,
-        //        coverloadingrate63 = os.coverloadingrate63,
-        //        coverloadingrate64 = os.coverloadingrate64,
-        //        coverloadingrate65 = os.coverloadingrate65,
-        //        coverloadingrate66 = os.coverloadingrate66,
-        //        coverloadingrate67 = os.coverloadingrate67,
-        //        coverloadingrate68 = os.coverloadingrate68,
-        //        coverloadingrate69 = os.coverloadingrate69,
-        //        coverloadingrate71 = os.coverloadingrate71,
-        //        coverloadingrate72 = os.coverloadingrate72,
-        //        coverloadingrate73 = os.coverloadingrate73,
-        //        coverloadingrate74 = os.coverloadingrate74,
-        //        coverloadingrate75 = os.coverloadingrate75,
-        //        coverloadingrate76 = os.coverloadingrate76,
-        //        coverloadingrate77 = os.coverloadingrate77,
-        //        coverloadingrate78 = os.coverloadingrate78,
-        //        coverloadingrate79 = os.coverloadingrate79,
-        //        coverloadingrate81 = os.coverloadingrate81,
-        //        coverloadingrate82 = os.coverloadingrate82,
-        //        coverloadingrate83 = os.coverloadingrate83,
-        //        coverloadingrate84 = os.coverloadingrate84,
-        //        coverloadingrate85 = os.coverloadingrate85,
-        //        coverloadingrate86 = os.coverloadingrate86,
-        //        coverloadingrate87 = os.coverloadingrate87,
-        //        coverloadingrate88 = os.coverloadingrate88,
-        //        coverloadingrate89 = os.coverloadingrate89,
-        //        coverloadingrate91 = os.coverloadingrate91,
-        //        coverloadingrate92 = os.coverloadingrate92,
-        //        coverloadingrate93 = os.coverloadingrate93,
-        //        coverloadingrate94 = os.coverloadingrate94,
-        //        coverloadingrate95 = os.coverloadingrate95,
-        //        coverloadingrate96 = os.coverloadingrate96,
-        //        coverloadingrate97 = os.coverloadingrate97,
-        //        coverloadingrate98 = os.coverloadingrate98,
-        //        coverloadingrate99 = os.coverloadingrate99,
-        //        coverloadingrate101 = os.coverloadingrate101,
-        //        coverloadingrate102 = os.coverloadingrate102,
-        //        coverloadingrate103 = os.coverloadingrate103,
-        //        coverloadingrate104 = os.coverloadingrate104,
-        //        coverloadingrate105 = os.coverloadingrate105,
-        //        coverloadingrate106 = os.coverloadingrate106,
-        //        coverloadingrate107 = os.coverloadingrate107,
-        //        coverloadingrate108 = os.coverloadingrate108,
-        //        coverloadingrate109 = os.coverloadingrate109,
-        //        coverloadingrate210 = os.coverloadingrate210,
-        //        coverloadingrate310 = os.coverloadingrate310,
-        //        coverloadingrate410 = os.coverloadingrate410,
-        //        coverloadingrate510 = os.coverloadingrate510,
-        //        coverloadingrate610 = os.coverloadingrate610,
-        //        coverloadingrate810 = os.coverloadingrate810,
-        //        coverloadingrate910 = os.coverloadingrate910,
-        //        coverloadingrate1010 = os.coverloadingrate1010,
-        //    }
-        //    ).Skip((pageNumber - 1) * pageSize) // Skip the appropriate number of records
-        //    .Take(pageSize) // Take only the specified page size
-        //.ToListAsync();
-        //    return new List<OptimaSecureRNE>(osRNEData);
-        //}
         static Dictionary<string, string> DataRowToDictionary(DataRow row)
         {
             var dictionary = new Dictionary<string, string>();
@@ -2063,22 +1447,16 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
         public static Dictionary<string, object> ExtractData(OptimaSecureUpsellPremiumValidation.Models.Domain.OptimaSecureRNE optimaGC)
         {
             var data = new Dictionary<string, object>();
-
-            // Get all properties of the OptimaGC class
             var properties = typeof(OptimaSecureUpsellPremiumValidation.Models.Domain.OptimaSecureRNE).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-            // Iterate over each property
             foreach (var property in properties)
             {
                 for (int i = 11; i <= 1010; i += 1)  // Adjust the range if necessary
                 {
-                    // Check if the property name matches the pattern
                     if (property.Name.StartsWith($"covername{i}") ||
                          property.Name.StartsWith($"coversi{i}") ||
                          property.Name.StartsWith($"coverprem{i}") ||
                          property.Name.StartsWith($"coverloadingrate{i}"))
                     {
-                        // Add property to dictionary
                         data[property.Name] = property.GetValue(optimaGC);
                     }
                 }
@@ -2241,8 +1619,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             upsellValue4,
                             upsellValue5
                         };
-
-
                 List<int?> insuredAges = new List<int?>
                     {
                         TryParseAge(row.txt_insured_age1),
@@ -2258,8 +1634,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         TryParseAge(row.txt_insured_age11),
                         TryParseAge(row.txt_insured_age12)
                     };
-
-
                 List<int?> ageValues = new List<int?>();
                 void AddAge(string ageStr)
                 {
@@ -2291,7 +1665,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 var eldestMember = ageValues.Max();
                 var numberOfMembers = noOfMembers;//calculate this field
                 int? count = noOfMembers;
-
 
                 //calculation of baseprem and crosscheck1 based on suminsured
                 if ((row.sum_insured1.HasValue && row.sum_insured1 != null) || (row.sum_insured2.HasValue && row.sum_insured2 != null) || (row.sum_insured3.HasValue && row.sum_insured4 != null) || (row.sum_insured5.HasValue && row.sum_insured5 != null) || (row.sum_insured6.HasValue && row.sum_insured6 != null))
@@ -2333,25 +1706,16 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? employeeDiscount = resultSearchEmployeeDescText;//c799
                     decimal? onlineDiscount = resultSearchOnlineDescText;//c800
 
-
                     decimal? combiDiscounts = resultCombiDescText;//C803
                     var policyType = row.policy_type;
-
                     var policyperiod = row.policy_period;//c14
-
                     List<string> insuredRelations = new List<string>();
-
-                    // Loop through the relation fields (1 to 12) and add them to the list
                     for (int i = 1; i <= 12; i++)
                     {
-                        // Dynamically access the properties and add them to the list
                         var insuredRelation = row.GetType().GetProperty($"txt_insured_relation{i}")?.GetValue(row)?.ToString();
                         insuredRelations.Add(insuredRelation);
                     }
-
-
                     List<decimal?> cumulativeBonusList = new List<decimal?>();
-
                     for (int i = 1; i <= noOfMembers; i++)
                     {
                         decimal? bonusValue = Convert.ToDecimal(row.GetType().GetProperty($"insured_cb{i}")?.GetValue(row));
@@ -2360,7 +1724,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                     decimal? cumulativeBonus = cumulativeBonusList.Sum(cb => cb ?? 0);
                     var c15 = row.tier_type;       //c15
-                    var c16 = row.policyplan;//c16
+                    var c16 = row.policyplan.Trim();//c16
 
                     List<decimal> basicLoadingRates = new List<decimal>();
 
@@ -2387,18 +1751,12 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? loyaltyDiscountValue = loyaltyDiscount;
                     loyaltyDiscountValue = loyaltyDiscount.HasValue && loyaltyDiscount.Value > 0 ? 2.5m : 0.0m;
 
-                    // Get the value from the 799th column (index 799)
                     decimal? employeeDiscountValue = employeeDiscount;
                     employeeDiscountValue = employeeDiscount.HasValue && employeeDiscount.Value > 0 ? 5.0m : 0.0m;
-
                     decimal? onlineDiscountValue = onlineDiscount;
                     onlineDiscountValue = onlineDiscount.HasValue && onlineDiscount.Value > 0 ? 5.0m : 0.0m;
-
-                    // Calculate the discount based on the policy type and number of members
                     decimal? familyDiscountValue = CalculateFamilyDiscount(policyType, numberOfMembers);
                     decimal? combiDiscountValue = CalculateCombiDiscount(combiDiscounts);
-
-                    //// Calculate the percentage based on the policy period
                     decimal tenureDiscount = GetPolicyPercentage(policyperiod);
                     var columnName = GetColumnNameForPolicyPeriod(policyperiod);
                     if (columnName == null)
@@ -2434,9 +1792,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     string condition = policyType; // Change to "INDIVIDUAL" to test the other case
 
                     decimal? basePremium = CalculateResult(condition, basePremiumsList);
-                    deductibleDiscount = deductibleDiscount / 100;
-                    var resultPremium = basePremium * deductibleDiscount;
-                    decimal? basePremiumAfterDeductible = basePremium - resultPremium;
+                    deductibleDiscount = (deductibleDiscount / 100) ?? 0;
+                    var resultPremium = (basePremium * deductibleDiscount) ?? 0;
+                    decimal? basePremiumAfterDeductible = (basePremium - resultPremium) ?? 0;
 
 
                     List<decimal?> loadingPremList = new List<decimal?>();
@@ -2449,11 +1807,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     }
                     decimal? loadingPrem = loadingPremList.Sum();
 
-                    decimal? BaseAndLoading = basePremiumAfterDeductible + loadingPrem;
-                    decimal? BaseAndLoadingLoyaltyDiscount = loyaltyDiscountValue / 100 * BaseAndLoading;
-                    decimal? BaseAndLoadingEmployeeDiscount = employeeDiscountValue / 100 * BaseAndLoading;
-                    decimal? BaseAndLoadingOnlineDiscount = (onlineDiscountValue / 100) * BaseAndLoading;
-                    decimal? BaseAndLoadingFamilyDiscount = familyDiscountValue * BaseAndLoading;
+                    decimal? BaseAndLoading = (basePremiumAfterDeductible + loadingPrem) ?? 0;
+                    decimal? BaseAndLoadingLoyaltyDiscount = ((loyaltyDiscountValue / 100) * BaseAndLoading) ?? 0;
+                    decimal? BaseAndLoadingEmployeeDiscount = ((employeeDiscountValue / 100) * BaseAndLoading) ?? 0;
+                    decimal? BaseAndLoadingOnlineDiscount = ((onlineDiscountValue / 100) * BaseAndLoading) ?? 0;
+                    decimal? BaseAndLoadingFamilyDiscount = (familyDiscountValue * BaseAndLoading) ?? 0;
 
                     decimal?[] cappedDiscountValues = new decimal?[]
                       {
@@ -2464,10 +1822,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                       };
 
                     decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
-                    decimal? combiDiscount = (BaseAndLoading - cappedDiscount) * combiDiscountValue;
+                    decimal? combiDiscount = ((BaseAndLoading - cappedDiscount) * combiDiscountValue) ?? 0;
                     decimal? longTermDiscount = CalculatelongTermDiscount(BaseAndLoading, cappedDiscount, combiDiscount, tenureDiscount);
-                    decimal? oSBasePremium = BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount;
-                    oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null;
+                    decimal? oSBasePremium = (BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount) ?? 0;
+                    oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)0;
 
 
                     decimal? unlimitedRestoreValue = 0;
@@ -2480,7 +1838,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                     // Apply the conditional logic
                     decimal? unlimitedRestore = unlimitedRestoreValue > 0 ? oSBasePremium * 0.005m : 0;//calculation required
-                    decimal? finalBasePremium = oSBasePremium + unlimitedRestore;
+                    decimal? finalBasePremium = (oSBasePremium + unlimitedRestore) ?? 0;
                     decimal? SI = 0;
                     string Opt = "N";
                     if (siRiderOneDataTable.Rows.Count >= 1)
@@ -2492,18 +1850,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             SI = Convert.ToDecimal(siValueObject);
                         }
                     }
-                    //var CIVariant1 = string.IsNullOrEmpty(iDSTData.insured1_information2_1) == null ? "9" : iDSTData.insured1_information2_1;
-                    //var CIVariant2 = string.IsNullOrEmpty(iDSTData.insured1_information2_2) == null ? "9" : iDSTData.insured1_information2_2;
-                    //var CIVariant3 = string.IsNullOrEmpty(iDSTData.insured1_information2_3) == null ? "9" : iDSTData.insured1_information2_3;
-                    //var CIVariant4 = string.IsNullOrEmpty(iDSTData.insured1_information2_4) == null ? "9" : iDSTData.insured1_information2_4;
-                    //var CIVariant5 = string.IsNullOrEmpty(iDSTData.insured1_information2_5) == null ? "9" : iDSTData.insured1_information2_5;
-                    //var CIVariant6 = string.IsNullOrEmpty(iDSTData.insured1_information2_6) == null ? "9" : iDSTData.insured1_information2_6;
-                    //var CIVariant7 = string.IsNullOrEmpty(iDSTData.insured1_information2_7) == null ? "9" : iDSTData.insured1_information2_7;
-                    //var CIVariant8 = string.IsNullOrEmpty(iDSTData.insured1_information2_8) == null ? "9" : iDSTData.insured1_information2_8;
-                    //var CIVariant9 = string.IsNullOrEmpty(iDSTData.insured1_information2_9) == null ? "9" : iDSTData.insured1_information2_9;
-                    //var CIVariant10 = string.IsNullOrEmpty(iDSTData.insured1_information2_10) == null? "9" : iDSTData.insured1_information2_10;
-                    //var CIVariant11 = string.IsNullOrEmpty(iDSTData.insured1_information2_11) == null ? "9" : iDSTData.insured1_information2_11;
-                    //var CIVariant12 = string.IsNullOrEmpty(iDSTData.insured1_information2_12) == null ? "9" : iDSTData.insured1_information2_12;
                     List<decimal> ciVariants = new List<decimal>();
                     for (int i = 1; i <= noOfMembers; i++)
                     {
@@ -2561,11 +1907,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? cIonlineDiscountValue = onlineDiscount;
                     decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
 
-                    decimal? cIBaseAndLoading = premium + loadingPremium;
-                    decimal? cIBaseLoyaltyDisocunt = cIloyaltyDiscount * cIBaseAndLoading;
-                    decimal? cIBaseEmployeeDisocunt = employeeDiscountValue / 100 * cIBaseAndLoading;
-                    decimal? cIBaseOnlineDisocunt = onlineDiscountValue / 100 * cIBaseAndLoading;
-                    decimal? cIBaseFamilyDisocunt = cIBaseAndLoading * cIFamilyDiscountValue;
+                    decimal? cIBaseAndLoading = (premium + loadingPremium) ?? 0;
+                    decimal? cIBaseLoyaltyDisocunt = (cIloyaltyDiscount * cIBaseAndLoading) ?? 0;
+                    decimal? cIBaseEmployeeDisocunt = ((employeeDiscountValue / 100) * cIBaseAndLoading) ?? 0;
+                    decimal? cIBaseOnlineDisocunt = ((onlineDiscountValue / 100) * cIBaseAndLoading) ?? 0;
+                    decimal? cIBaseFamilyDisocunt = (cIBaseAndLoading * cIFamilyDiscountValue) ?? 0;
                     decimal?[] cIcappedDiscountValues = new decimal?[]
                     {
                             cIBaseLoyaltyDisocunt, // Value from cell C158
@@ -2582,9 +1928,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             cIBaseFamilyDisocunt  // Value from cell C161
                       };
                     decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
-                    decimal? CIBaselongTermDiscount = (cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount;
+                    decimal? CIBaselongTermDiscount = ((cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount) ?? 0;
 
-                    decimal? cIBaseBaseCoverPremium = cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount;
+                    decimal? cIBaseBaseCoverPremium = (cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount) ?? 0;
 
                     string cashBenefitOpt = "N";
                     decimal? hdcsi = 0;
@@ -2665,8 +2011,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     string? ageBand = hdcAgeBand;
                     cashBenefitPremiumValue = cashBenefitPremiumValue ?? 0m;
                     decimal? cashBenefitPremium = cashBenefitPremiumValue;
-                    // Construct the raw SQL query
-
                     var dictionary = new Dictionary<string, List<string>>
                 {
                     { "2a", GenerateColumnNames("2a") },
@@ -2679,24 +2023,18 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     var columnNamesString = "";
                     if (dictionary.TryGetValue(key, out var columnValues))
                     {
-                        // Convert the list of column names to a single string
                         columnNamesString = string.Join(", ", columnValues);
-                        Console.WriteLine($"Key: {key}");
-                        Console.WriteLine($"Column Values: {columnNamesString}");
+                        
                     }
-                    ////{columnNamesString},p1, c1, c2, c3, p2,eldest_member_age_band, family_composition
                     var sqlhdcproportionsplit = $@"
                 SELECT * 
                 FROM hdcproportionsplit
                 WHERE  eldest_member_age_band = @p0 AND family_composition = @p1";
-                    //Execute the raw SQL query
-
                     var results = hdcproportionsplit
                              .Where(roww =>
                              {
                                  if (roww.Value is Hashtable rateDetails)
                                  {
-                                     // Check that "eldest_member_age_band" exists and is not null
                                      var eldestMemberAgeBand = rateDetails["eldest_member_age_band"];
                                      var deductible = rateDetails["family_composition"];
 
@@ -2711,7 +2049,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                          {
                              if (roww.Value is Hashtable details)
                              {
-                                 // Only return a result if the necessary keys exist
                                  return new
                                  {
                                      eldest_member_age_band = details["eldest_member_age_band"]?.ToString(), // Use null-conditional operator
@@ -2738,7 +2075,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         c2 = Convert.ToDecimal(r.c2)
                     }).FirstOrDefault();
 
-
                     decimal? Insured_1 = selectedValues?.a1 * cashBenefitPremiumValue;
                     decimal? Insured_2 = selectedValues?.a2 * cashBenefitPremiumValue;
                     decimal? Insured_3 = 0m;
@@ -2753,7 +2089,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         Insured_3 = selectedValues?.c1 * cashBenefitPremiumValue;
                         Insured_4 = (selectedValues?.c2) * cashBenefitPremiumValue;
                     }
-
                     decimal? Insured_5 = 0;
                     decimal? Insured_6 = 0;
                     decimal? Insured_7 = 0;
@@ -2762,7 +2097,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? Insured_10 = 0;
                     decimal? Insured_11 = 0;
                     decimal? Insured_12 = 0;
-
 
                     List<decimal?> premiumCheckInsuredValues = new List<decimal?>();
                     premiumCheckInsuredValues.Add(Insured_1);
@@ -2778,10 +2112,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     premiumCheckInsuredValues.Add(Insured_11);
                     premiumCheckInsuredValues.Add(Insured_12);
 
-                    decimal? cashBenefitLoadingPremiumSum = premiumCheckInsuredValues.Sum();
-                    decimal? premiumCheck = cashBenefitLoadingPremiumSum - cashBenefitPremiumValue;
+                    decimal? cashBenefitLoadingPremiumSum = (premiumCheckInsuredValues.Sum()) ?? 0;
+                    decimal? premiumCheck = (cashBenefitLoadingPremiumSum - cashBenefitPremiumValue) ?? 0;
 
-                    // Calculate the result and handle errors              
                     List<decimal?> cashBenefitLoadingPremiumValues = new List<decimal?>();
                     for (int i = 0; i < noOfMembers; i++)
                     {
@@ -2791,16 +2124,15 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                         decimal? cashBenefit = CalculateLoadingPremium(insuredValue, basicLoadingRate / 100);
                         cashBenefitLoadingPremiumValues.Add(cashBenefit);
                     }
+                    decimal? cashBenefitLoadingPremium = (cashBenefitLoadingPremiumValues.Sum()) ?? 0;
 
-                    decimal? cashBenefitLoadingPremium = cashBenefitLoadingPremiumValues.Sum();
-
-                    decimal? hDCBaseAndLoading = cashBenefitPremium + cashBenefitLoadingPremium;
-                    decimal? hDCBaseAndLoadingLoyaltyDiscount = hDCBaseAndLoading * cIloyaltyDiscount;
+                    decimal? hDCBaseAndLoading = (cashBenefitPremium + cashBenefitLoadingPremium) ?? 0;
+                    decimal? hDCBaseAndLoadingLoyaltyDiscount = (hDCBaseAndLoading * cIloyaltyDiscount) ?? 0;
                     decimal? hDCBaseAndLoadingEmployeeDiscount = hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue);
-                    onlineDiscountValue = onlineDiscountValue / 100;
-                    decimal? hDCOnlineDisocuntValue = hDCBaseAndLoading * (onlineDiscountValue);//GetOnlineDiscount(noOfMembers);
+                    onlineDiscountValue = (onlineDiscountValue / 100) ?? 0;
+                    decimal? hDCOnlineDisocuntValue = (hDCBaseAndLoading * (onlineDiscountValue)) ?? 0;//GetOnlineDiscount(noOfMembers);
                     decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
-                    decimal? hDCBaseAndLoadingFamilyDiscount = hDCBaseAndLoading * (familyDiscountValue);
+                    decimal? hDCBaseAndLoadingFamilyDiscount = (hDCBaseAndLoading * (familyDiscountValue)) ?? 0;
                     decimal?[] hDCcappedDiscountValues = new decimal?[]
                      {
                             hDCBaseAndLoadingLoyaltyDiscount, // Value from cell C158
@@ -2810,18 +2142,12 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                      };
 
                     decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
-
-                    decimal? hDClongTermDiscount = (hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount;
-
-                    decimal? hDCBaseCoverPremium = hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount;
-
-                    decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium);
-
-                    decimal? GST = netPremium * 0.18m;
-
-                    decimal? finalPremium = netPremium + GST;
-
-                    baseCrosscheck = row.num_tot_premium - finalPremium;
+                    decimal? hDClongTermDiscount = ((hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount) ?? 0;
+                    decimal? hDCBaseCoverPremium = (hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount) ?? 0;
+                    decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium) ?? 0;
+                    decimal? GST = (netPremium * 0.18m) ?? 0;
+                    decimal? finalPremium = (netPremium + GST) ?? 0;
+                    baseCrosscheck = (row.num_tot_premium - finalPremium) ?? 0;
                 }
 
                 //calculation of upsellbaseprem and crosscheck2 based on upsell value
@@ -2936,22 +2262,17 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     var policyperiod = row.policy_period;//c14
 
                     List<string> insuredRelations = new List<string>();
-
-                    // Loop through the relation fields (1 to 12) and add them to the list
                     for (int i = 1; i <= 12; i++)
                     {
-                        // Dynamically access the properties and add them to the list
                         var insuredRelation = row.GetType().GetProperty($"txt_insured_relation{i}")?.GetValue(row)?.ToString();
                         insuredRelations.Add(insuredRelation);
                     }
-
-
                     List<decimal?> cumulativeBonusList = new List<decimal?>();
 
                     for (int i = 1; i <= noOfMembers; i++)
                     {
                         decimal? bonusValue = Convert.ToDecimal(row.GetType().GetProperty($"insured_cb{i}")?.GetValue(row));
-                        cumulativeBonusList.Add(bonusValue);
+                        cumulativeBonusList.Add(bonusValue ?? 0);
                     }
 
                     decimal? cumulativeBonus = cumulativeBonusList.Sum(cb => cb ?? 0);
@@ -3030,9 +2351,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     string condition = policyType; // Change to "INDIVIDUAL" to test the other case
 
                     decimal? basePremium = CalculateResult(condition, basePremiumsList);
-                    deductibleDiscount = deductibleDiscount / 100;
-                    var resultPremium = basePremium * deductibleDiscount;
-                    decimal? basePremiumAfterDeductible = basePremium - resultPremium;
+                    deductibleDiscount = (deductibleDiscount / 100) ?? 0;
+                    var resultPremium = (basePremium * deductibleDiscount) ?? 0;
+                    decimal? basePremiumAfterDeductible = (basePremium - resultPremium) ?? 0;
 
 
                     List<decimal?> loadingPremList = new List<decimal?>();
@@ -3045,11 +2366,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     }
                     decimal? loadingPrem = loadingPremList.Sum();
 
-                    decimal? BaseAndLoading = basePremiumAfterDeductible + loadingPrem;
-                    decimal? BaseAndLoadingLoyaltyDiscount = loyaltyDiscountValue / 100 * BaseAndLoading;
-                    decimal? BaseAndLoadingEmployeeDiscount = employeeDiscountValue / 100 * BaseAndLoading;
-                    decimal? BaseAndLoadingOnlineDiscount = (onlineDiscountValue / 100) * BaseAndLoading;
-                    decimal? BaseAndLoadingFamilyDiscount = familyDiscountValue * BaseAndLoading;
+                    decimal? BaseAndLoading = (basePremiumAfterDeductible + loadingPrem) ?? 0;
+                    decimal? BaseAndLoadingLoyaltyDiscount = ((loyaltyDiscountValue / 100) * BaseAndLoading) ?? 0;
+                    decimal? BaseAndLoadingEmployeeDiscount = ((employeeDiscountValue / 100) * BaseAndLoading) ?? 0;
+                    decimal? BaseAndLoadingOnlineDiscount = ((onlineDiscountValue / 100) * BaseAndLoading) ?? 0;
+                    decimal? BaseAndLoadingFamilyDiscount = (familyDiscountValue * BaseAndLoading) ?? 0;
 
                     decimal?[] cappedDiscountValues = new decimal?[]
                       {
@@ -3060,10 +2381,10 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                       };
 
                     decimal? cappedDiscount = CalculateCappedDiscount(cappedDiscountValues, BaseAndLoading);
-                    decimal? combiDiscount = (BaseAndLoading - cappedDiscount) * combiDiscountValue;
+                    decimal? combiDiscount = ((BaseAndLoading - cappedDiscount) * combiDiscountValue) ?? 0;
                     decimal? longTermDiscount = CalculatelongTermDiscount(BaseAndLoading, cappedDiscount, combiDiscount, tenureDiscount);
-                    decimal? oSBasePremium = BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount;
-                    oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)null;
+                    decimal? oSBasePremium = (BaseAndLoading - cappedDiscount - combiDiscount - longTermDiscount) ?? 0;
+                    oSBasePremium = oSBasePremium.HasValue ? Math.Round(oSBasePremium.Value, 2) : (decimal?)0;
 
 
                     decimal? unlimitedRestoreValue = 0;
@@ -3088,18 +2409,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                             SI = Convert.ToDecimal(siValueObject);
                         }
                     }
-                    //var CIVariant1 = string.IsNullOrEmpty(iDSTData.insured1_information2_1) == null ? "9" : iDSTData.insured1_information2_1;
-                    //var CIVariant2 = string.IsNullOrEmpty(iDSTData.insured1_information2_2) == null ? "9" : iDSTData.insured1_information2_2;
-                    //var CIVariant3 = string.IsNullOrEmpty(iDSTData.insured1_information2_3) == null ? "9" : iDSTData.insured1_information2_3;
-                    //var CIVariant4 = string.IsNullOrEmpty(iDSTData.insured1_information2_4) == null ? "9" : iDSTData.insured1_information2_4;
-                    //var CIVariant5 = string.IsNullOrEmpty(iDSTData.insured1_information2_5) == null ? "9" : iDSTData.insured1_information2_5;
-                    //var CIVariant6 = string.IsNullOrEmpty(iDSTData.insured1_information2_6) == null ? "9" : iDSTData.insured1_information2_6;
-                    //var CIVariant7 = string.IsNullOrEmpty(iDSTData.insured1_information2_7) == null ? "9" : iDSTData.insured1_information2_7;
-                    //var CIVariant8 = string.IsNullOrEmpty(iDSTData.insured1_information2_8) == null ? "9" : iDSTData.insured1_information2_8;
-                    //var CIVariant9 = string.IsNullOrEmpty(iDSTData.insured1_information2_9) == null ? "9" : iDSTData.insured1_information2_9;
-                    //var CIVariant10 = string.IsNullOrEmpty(iDSTData.insured1_information2_10) == null? "9" : iDSTData.insured1_information2_10;
-                    //var CIVariant11 = string.IsNullOrEmpty(iDSTData.insured1_information2_11) == null ? "9" : iDSTData.insured1_information2_11;
-                    //var CIVariant12 = string.IsNullOrEmpty(iDSTData.insured1_information2_12) == null ? "9" : iDSTData.insured1_information2_12;
                     List<decimal> ciVariants = new List<decimal>();
                     for (int i = 1; i <= noOfMembers; i++)
                     {
@@ -3157,11 +2466,11 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     decimal? cIonlineDiscountValue = onlineDiscount;
                     decimal? cIFamilyDiscountValue = GetFamilyDiscount(noOfMembers);
 
-                    decimal? cIBaseAndLoading = premium + loadingPremium;
-                    decimal? cIBaseLoyaltyDisocunt = cIloyaltyDiscount * cIBaseAndLoading;
-                    decimal? cIBaseEmployeeDisocunt = employeeDiscountValue / 100 * cIBaseAndLoading;
-                    decimal? cIBaseOnlineDisocunt = onlineDiscountValue / 100 * cIBaseAndLoading;
-                    decimal? cIBaseFamilyDisocunt = cIBaseAndLoading * cIFamilyDiscountValue;
+                    decimal? cIBaseAndLoading = (premium + loadingPremium) ?? 0;
+                    decimal? cIBaseLoyaltyDisocunt = (cIloyaltyDiscount * cIBaseAndLoading) ?? 0;
+                    decimal? cIBaseEmployeeDisocunt = ((employeeDiscountValue / 100) * cIBaseAndLoading) ?? 0;
+                    decimal? cIBaseOnlineDisocunt = ((onlineDiscountValue / 100) * cIBaseAndLoading);
+                    decimal? cIBaseFamilyDisocunt = (cIBaseAndLoading * cIFamilyDiscountValue) ?? 0;
                     decimal?[] cIcappedDiscountValues = new decimal?[]
                     {
              cIBaseLoyaltyDisocunt, // Value from cell C158
@@ -3178,9 +2487,9 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
              cIBaseFamilyDisocunt  // Value from cell C161
                       };
                     decimal? cIBasecappedDiscount = CalculateCappedDiscount(cicappedDiscountValues, cIBaseAndLoading);
-                    decimal? CIBaselongTermDiscount = (cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount;
+                    decimal? CIBaselongTermDiscount = ((cIBaseAndLoading - cIBasecappedDiscount) * tenureDiscount) ?? 0;
 
-                    decimal? cIBaseBaseCoverPremium = cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount;
+                    decimal? cIBaseBaseCoverPremium = (cIBaseAndLoading - cIBasecappedDiscount - CIBaselongTermDiscount) ??0;
 
                     string cashBenefitOpt = "N";
                     decimal? hdcsi = 0;
@@ -3277,8 +2586,8 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     {
                         // Convert the list of column names to a single string
                         columnNamesString = string.Join(", ", columnValues);
-                        Console.WriteLine($"Key: {key}");
-                        Console.WriteLine($"Column Values: {columnNamesString}");
+                       // Console.WriteLine($"Key: {key}");
+                        //Console.WriteLine($"Column Values: {columnNamesString}");
                     }
                     ////{columnNamesString},p1, c1, c2, c3, p2,eldest_member_age_band, family_composition
                     var sqlhdcproportionsplit = $@"
@@ -3375,7 +2684,7 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                     premiumCheckInsuredValues.Add(Insured_12);
 
                     decimal? cashBenefitLoadingPremiumSum = premiumCheckInsuredValues.Sum();
-                    decimal? premiumCheck = cashBenefitLoadingPremiumSum - cashBenefitPremiumValue;
+                    decimal? premiumCheck = (cashBenefitLoadingPremiumSum - cashBenefitPremiumValue) ?? 0;
 
                     // Calculate the result and handle errors              
                     List<decimal?> cashBenefitLoadingPremiumValues = new List<decimal?>();
@@ -3390,13 +2699,13 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
                     decimal? cashBenefitLoadingPremium = cashBenefitLoadingPremiumValues.Sum();
 
-                    decimal? hDCBaseAndLoading = cashBenefitPremium + cashBenefitLoadingPremium;
-                    decimal? hDCBaseAndLoadingLoyaltyDiscount = hDCBaseAndLoading * cIloyaltyDiscount;
-                    decimal? hDCBaseAndLoadingEmployeeDiscount = hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue);
-                    onlineDiscountValue = onlineDiscountValue / 100;
-                    decimal? hDCOnlineDisocuntValue = hDCBaseAndLoading * (onlineDiscountValue);//GetOnlineDiscount(noOfMembers);
+                    decimal? hDCBaseAndLoading = (cashBenefitPremium + cashBenefitLoadingPremium) ?? 0;
+                    decimal? hDCBaseAndLoadingLoyaltyDiscount = (hDCBaseAndLoading * cIloyaltyDiscount) ?? 0;
+                    decimal? hDCBaseAndLoadingEmployeeDiscount = (hDCBaseAndLoading * GetEmployeeDiscount(employeeDiscountValue))??0;
+                    onlineDiscountValue = (onlineDiscountValue / 100) ?? 0;
+                    decimal? hDCOnlineDisocuntValue = (hDCBaseAndLoading * (onlineDiscountValue)) ?? 0;//GetOnlineDiscount(noOfMembers);
                     decimal? hDCBaseAndLoadingOnlineDiscount = hDCOnlineDisocuntValue;
-                    decimal? hDCBaseAndLoadingFamilyDiscount = hDCBaseAndLoading * (familyDiscountValue);
+                    decimal? hDCBaseAndLoadingFamilyDiscount = (hDCBaseAndLoading * (familyDiscountValue)) ?? 0;
                     decimal?[] hDCcappedDiscountValues = new decimal?[]
                      {
              hDCBaseAndLoadingLoyaltyDiscount, // Value from cell C158
@@ -3406,20 +2715,13 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                      };
 
                     decimal? hDCCappedDiscount = CalculateCappedDiscount(hDCcappedDiscountValues, hDCBaseAndLoading);
-
-                    decimal? hDClongTermDiscount = (hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount;
-
-                    decimal? hDCBaseCoverPremium = hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount;
-
-                    decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium);
-
-                    decimal? GST = netPremium * 0.18m;
-
-                    decimal? finalPremium = netPremium + GST;
-
+                    decimal? hDClongTermDiscount = ((hDCBaseAndLoading - hDCCappedDiscount) * tenureDiscount) ?? 0;
+                    decimal? hDCBaseCoverPremium = (hDCBaseAndLoading - hDCCappedDiscount - hDClongTermDiscount) ?? 0;
+                    decimal? netPremium = (finalBasePremium + cIBaseBaseCoverPremium + hDCBaseCoverPremium) ?? 0;
+                    decimal? GST = (netPremium * 0.18m) ?? 0;
+                    decimal? finalPremium = (netPremium + GST) ?? 0;
                     decimal? selectedUpsellPremium = row.upsellpremium1 ?? row.upsellpremium2 ?? row.upsellpremium3 ?? row.upsellpremium4 ?? row.upsellpremium5 ?? 0;
-
-                    upsellCrosscheck = selectedUpsellPremium - finalPremium;
+                    upsellCrosscheck = (selectedUpsellPremium - finalPremium) ?? 0;
 
                     os = new OptimaSecureRNE
                     {
@@ -4185,23 +3487,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 return max + percentageAdjustment;
             }
         }
-        //private static IEnumerable<object> FindColumnValues<T>(IEnumerable<T> data, string columnName)
-        //{
-        //    // Get the type of the items in the collection
-        //    Type type = typeof(T);
-
-        //    // Get the property info for the specified column name
-        //    PropertyInfo property = type.GetProperty(columnName, BindingFlags.Public | BindingFlags.Instance);
-
-        //    // Check if the property exists
-        //    if (property == null)
-        //    {
-        //        throw new ArgumentException($"Property '{columnName}' does not exist in type '{type.Name}'.");
-        //    }
-
-        //    // Extract values for the specified property
-        //    return data.Select(item => property.GetValue(item));
-        //}
         private string ProcessCountForA(List<string> cellValues)
         {
             if (cellValues == null)
@@ -4299,41 +3584,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
             // Return the values for the specified column name
             return data.Select(dict => dict.TryGetValue(columnName, out var value) ? value : null);
         }
-
-        private async Task<List<string>> GetNonNullableRiderNameColumnsAsync()
-        {
-            // Define the query to get column names starting with 'rider_name'
-            var columnQuery = "SELECT column_name AS ColumnName " +
-                              "FROM information_schema.columns " +
-                              "WHERE table_name = 'gc_hdfc' AND column_name LIKE 'covername%'  OR column_name LIKE 'coversi%'";
-
-            var nonNullableColumns = new List<string>();
-            var connectionString =
-           System.Configuration.ConfigurationManager.
-            ConnectionStrings["defaultConnection"].ToString();
-            using (var connection = new NpgsqlConnection(connectionString))
-            {
-                await connection.OpenAsync();
-
-                // Get column names
-                var columnNames = await connection.QueryAsync<ColumnNameDto>(columnQuery);
-
-                // For each column, check if it has non-null values
-                foreach (var column in columnNames)
-                {
-                    var checkQuery = $"SELECT COUNT(*) FROM gc_hdfc WHERE \"{column.ColumnName}\" IS NOT NULL";
-
-                    var nonNullCount = await connection.ExecuteScalarAsync<int>(checkQuery);
-
-                    if (nonNullCount > 0)
-                    {
-                        nonNullableColumns.Add(column.ColumnName);
-                    }
-                }
-            }
-
-            return nonNullableColumns;
-        }
         static async Task<List<Dictionary<string, object>>> FetchDataAsync(string connectionString, List<string> columnNames)
         {
             var result = new List<Dictionary<string, object>>();
@@ -4363,68 +3613,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
 
             return result;
         }
-        //public static List<string> SelectPolicies
-        //   (string postgreTableName, List<string> newBatchIds,
-        //    NpgsqlConnection postgresConnection, List<string> idPlaceholders)
-        //{
-        //    List<string> policies = new List<string>();
-        //    idPlaceholders.Clear();
-        //    foreach (var batchId in newBatchIds)
-        //    {
-        //        //var properties = (IDictionary<string, object>)item;
-
-        //        //// Assuming 'BATCHID' is the key you want to extract
-        //        //if (properties.TryGetValue("BATCHID", out var batchId))
-        //        //{
-        //        // Add the value to the idPlaceholders list (ensure it's a string)
-        //        idPlaceholders.Add(batchId);
-        //        //}
-        //    }
-        //    string status = "Reconciliation Successful";
-
-        //    // Create the SQL query
-        //    string query = $"SELECT policy_number  FROM {postgreTableName} WHERE rn_generation_status = {status}";
-
-        //    // Fetch data from Oracle
-        //    var oracleData = postgresConnection.Query<rne_requestedbatchpolicies>(query);
-        //    if (oracleData.Any())
-        //    {
-        //        //using (transaction = postgresConnection.BeginTransaction())
-        //        //{
-        //        try
-        //        {                    
-        //            foreach (var row in oracleData)
-        //            {
-        //                // Dynamically create the insert command
-        //                var properties = typeof(rne_requestedbatchpolicies).GetProperties();
-        //                var columns = string.Join(", ", properties.Select(p => p.Name));
-        //                var parameters = string.Join(", ", properties.Select(p => "@" + p.Name));
-
-        //                //var insertQuery = $"INSERT INTO ins.{postgreTableName}({columns}) VALUES ({parameters});";
-        //                //postgresConnection.Execute(insertQuery, row, transaction);
-        //                policies.Add(row.policynumber);
-        //            }                   
-        //            Console.WriteLine("Data transferred successfully to rne_requestedbatchpolicies in postgre!");
-        //            return policies;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            // Roll back the transaction on error
-        //            //transaction.Rollback();
-        //            Console.WriteLine(ex.ToString());
-        //            return null;
-        //        }
-        //        //}
-        //    }
-        //    //if (oracleData == null || !oracleData.Any())
-        //    //{
-        //    //    Console.WriteLine("No data returned from the rne_requestedbatchpoliciesquery.");
-        //    //}
-
-        //    //// Print the query for debugging purposes
-        //    //Console.WriteLine(query);
-        //    return policies;
-        //}
         public List<List<string>> FetchNewBatchIds(NpgsqlConnection postgresConnection)
         {
             string? status = ConfigurationManager.AppSettings["Status"];
@@ -4445,96 +3633,6 @@ namespace OptimaSecureUpsellPremiumValidation.BussinessLogic
                 sourceBatchIds.Add(batchInfo);
             }
             return sourceBatchIds;
-        }
-
-        public List<string> FetchNewBatchIdfrompostgre(string oracleschemaName, OracleConnection oracleConnection, NpgsqlConnection postgresConnection)
-        {
-            Console.WriteLine("FetchNewBatchIdfrompostgre method started");
-            string status = ConfigurationManager.AppSettings["Status"];
-            // Fetch source batch IDs
-            var sourceBatchIds = new HashSet<string>();
-            var sqlSource = $"SELECT DISTINCT batchid FROM ins.tablea";
-            var sourceResults = postgresConnection.Query<string>(sqlSource);
-            foreach (string batchId in sourceResults)
-            {
-                sourceBatchIds.Add(batchId);
-            }
-
-            // Fetch target batch IDs
-            var targetBatchIds = new HashSet<string>();
-            var sqlTarget = "SELECT DISTINCT batchid FROM ins.tableb"; // Adjust for your PostgreSQL schema if needed
-            var targetResults = postgresConnection.Query<string>(sqlTarget);
-            foreach (string batchId in targetResults)
-            {
-                targetBatchIds.Add(batchId);
-            }
-
-            // Calculate new batch IDs
-            sourceBatchIds.ExceptWith(targetBatchIds);
-            Console.WriteLine("FetchNewBatchIdfrompostgre method completed");
-            return new List<string>(sourceBatchIds);
-
-        }
-        public void SelectAndinsertRequestedBatch(string oracleTableName, string postgreTableName, string oracleschemaName, List<string> newBatchIds, OracleConnection oracleConnection, NpgsqlConnection postgresConnection, NpgsqlTransaction transaction, List<string> idPlaceholders)
-        {
-            Console.WriteLine("SelectAndinsertRequestedBatch method started");
-            string status = ConfigurationManager.AppSettings["Status"];
-            idPlaceholders.Clear();
-            foreach (var batchId in newBatchIds)
-            {
-
-                //var properties = (IDictionary<string, object>)item;
-
-                //// Assuming 'BATCHID' is the key you want to extract
-                //if (properties.TryGetValue("BATCHID", out var batchId))
-                //{
-                // Add the value to the idPlaceholders list (ensure it's a string)
-                idPlaceholders.Add(batchId);
-                //}
-            }
-
-            // Create the SQL query
-            string query = $"SELECT * FROM ins.tablea WHERE BATCHID IN ({string.Join(",", idPlaceholders.Select(id => $"'{id}'"))})";
-
-            // Fetch data from Oracle
-            var oracleData = postgresConnection.Query<tablea>(query);
-            if (oracleData.Any())
-            {
-                //using (transaction = postgresConnection.BeginTransaction())
-                //{
-                try
-                {
-                    foreach (var row in oracleData)
-                    {
-                        // Dynamically create the insert command
-                        var properties = typeof(tablea).GetProperties();
-                        var columns = string.Join(", ", properties.Select(p => p.Name));
-                        var parameters = string.Join(", ", properties.Select(p => "@" + p.Name));
-
-                        var insertQuery = $"INSERT INTO ins.tableb({columns}) VALUES ({parameters});";
-                        postgresConnection.Execute(insertQuery, row, transaction);
-                        ////Commit the transaction
-
-                    }
-                    //transaction.Commit();
-                    Console.WriteLine("Data transferred successfully to tablea in postgre!");
-                }
-
-                catch (Exception ex)
-                { // Roll back the transaction on error
-                  //transaction.Rollback();
-                    Console.WriteLine(ex.ToString());
-                }
-                // }
-            }
-
-            if (oracleData == null || !oracleData.Any())
-            {
-                Console.WriteLine("No data returned from the rne_requestedbatchpoliciesquery.");
-            }
-            // Print the query for debugging purposes
-            Console.WriteLine(query);
-            Console.WriteLine("SelectAndinsertRequestedBatch method completed");
         }
         public async Task<Dictionary<string, Hashtable>> GetRatesAsync(HDFCDbContext dbContext)
         {
